@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,15 +29,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci || npm install
+        run: npm install --legacy-peer-deps
 
       - name: Build with GitHub Pages base path
         run: npm run build
         env:
-          # Automatically uses /<repo-name>/ as base path for GitHub Pages
+          # Uses /<repo-name>/ as base path for GitHub Pages
           VITE_BASE: /${{ github.event.repository.name }}/
 
       - name: Copy index.html to 404.html for SPA routing fallback
