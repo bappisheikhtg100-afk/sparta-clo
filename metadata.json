@@ -1,0 +1,6 @@
+{
+  "name": "SPARTA — Minimalist Luxury Apparel & Fragrance",
+  "description": "Contemporary luxury menswear, tailored silhouettes, footwear, and signature fragrances by SPARTA Bangladesh. Cash on Delivery nationwide.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
