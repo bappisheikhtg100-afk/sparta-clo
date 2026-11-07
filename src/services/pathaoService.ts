@@ -11,6 +11,7 @@ export interface PathaoCredentials {
   username: string;
   password: string;
   storeId?: number;
+  webhookSecret?: string;
   isSandbox?: boolean;
 }
 

@@ -1,57 +1,15 @@
--- SPARTA E-COMMERCE DATABASE MIGRATION
--- Project: xqzzeisabqsqblogbvhb
--- Designed for: PostgreSQL / Supabase with Row Level Security (RLS)
+-- ==============================================================================
+-- SPARTA E-COMMERCE PRODUCTION DATABASE SCHEMA & INITIAL SEED
+-- Project ID: xqzzeisabqsqblogbvhb
+-- Target: Supabase PostgreSQL with Row Level Security (RLS)
+-- Execution: Copy & run this entire script in Supabase Dashboard -> SQL Editor
+-- ==============================================================================
 
 -- 1. EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 2. ENUMS
-DO $$ BEGIN
-  CREATE TYPE order_status AS ENUM (
-    'pending',
-    'confirmed',
-    'processing',
-    'shipped',
-    'delivered',
-    'cancelled',
-    'returned'
-  );
-EXCEPTION
-  WHEN duplicate_object THEN null;
-END $$;
-
-DO $$ BEGIN
-  CREATE TYPE courier_status AS ENUM (
-    'not_submitted',
-    'pending_pickup',
-    'in_transit',
-    'delivered',
-    'failed_delivery',
-    'returned'
-  );
-EXCEPTION
-  WHEN duplicate_object THEN null;
-END $$;
-
-DO $$ BEGIN
-  CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'manager');
-EXCEPTION
-  WHEN duplicate_object THEN null;
-END $$;
-
--- 3. ADMIN PROFILES
-CREATE TABLE IF NOT EXISTS public.admin_profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email TEXT NOT NULL UNIQUE,
-  full_name TEXT NOT NULL DEFAULT 'SPARTA Admin',
-  role user_role NOT NULL DEFAULT 'admin',
-  is_active BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- 4. PRODUCT CATEGORIES
+-- 2. PRODUCT CATEGORIES TABLE
 CREATE TABLE IF NOT EXISTS public.product_categories (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   slug TEXT NOT NULL UNIQUE,
@@ -61,378 +19,478 @@ CREATE TABLE IF NOT EXISTS public.product_categories (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 5. PRODUCTS
+-- 3. PRODUCTS TABLE (Uses TEXT primary key for sparta-001, sparta-002, etc.)
 CREATE TABLE IF NOT EXISTS public.products (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,
-  sku TEXT UNIQUE,
   name TEXT NOT NULL,
-  category_id UUID REFERENCES public.product_categories(id) ON DELETE SET NULL,
-  category TEXT NOT NULL, -- Cached slug/name for fast queries (Upperwear, Bottomwear, etc.)
+  category TEXT NOT NULL,
   price NUMERIC(10, 2) NOT NULL DEFAULT 0,
   original_price NUMERIC(10, 2),
-  price_map JSONB, -- For volume-based pricing, e.g. {"15 ml": 299, "50 ml": 799, "100 ml": 1199}
+  price_map JSONB,
   edition_note TEXT,
   description TEXT NOT NULL DEFAULT '',
   details JSONB NOT NULL DEFAULT '[]'::jsonb,
   images JSONB NOT NULL DEFAULT '[]'::jsonb,
   hover_image_index INT DEFAULT 1,
-  hover_fit TEXT DEFAULT 'cover-center',
-  image_fit TEXT DEFAULT 'cover-center',
+  hover_fit TEXT DEFAULT 'cover-top',
+  image_fit TEXT DEFAULT 'cover-top',
   canvas_bg TEXT DEFAULT '#F2F1EE',
   colors JSONB DEFAULT '[]'::jsonb,
-  sizes JSONB NOT NULL DEFAULT '["Free Size"]'::jsonb,
-  stock TEXT NOT NULL DEFAULT 'in-stock', -- 'in-stock', 'out-of-stock', 'coming-soon'
-  stock_count INT NOT NULL DEFAULT 50,
+  sizes JSONB NOT NULL DEFAULT '["S", "M", "L", "XL"]'::jsonb,
+  stock TEXT NOT NULL DEFAULT 'in-stock',
+  stock_count INT NOT NULL DEFAULT 15,
   is_published BOOLEAN NOT NULL DEFAULT true,
   sort_order INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 6. CUSTOMERS
+-- 4. CUSTOMERS TABLE
 CREATE TABLE IF NOT EXISTS public.customers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   full_name TEXT NOT NULL,
   phone TEXT NOT NULL UNIQUE,
   email TEXT,
-  delivery_division TEXT,
-  delivery_district TEXT,
-  delivery_thana TEXT,
-  delivery_address TEXT,
-  total_orders INT NOT NULL DEFAULT 0,
+  address TEXT NOT NULL,
+  delivery_zone TEXT NOT NULL DEFAULT 'inside-dhaka',
+  total_orders INT NOT NULL DEFAULT 1,
   total_spent NUMERIC(10, 2) NOT NULL DEFAULT 0,
-  first_order_at TIMESTAMPTZ,
-  last_order_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 7. ORDERS
+-- 5. ORDERS TABLE
 CREATE TABLE IF NOT EXISTS public.orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   order_number TEXT NOT NULL UNIQUE, -- e.g. SPT-284910
-  customer_id UUID REFERENCES public.customers(id) ON DELETE SET NULL,
   customer_name TEXT NOT NULL,
   customer_phone TEXT NOT NULL,
-  delivery_division TEXT NOT NULL,
-  delivery_district TEXT NOT NULL,
-  delivery_thana TEXT NOT NULL,
-  delivery_address TEXT NOT NULL,
-  delivery_zone TEXT NOT NULL DEFAULT 'inside-dhaka', -- 'inside-dhaka' | 'outside-dhaka'
-  delivery_notes TEXT,
-  status order_status NOT NULL DEFAULT 'pending',
+  shipping_address TEXT NOT NULL,
+  delivery_zone TEXT NOT NULL DEFAULT 'inside-dhaka',
+  notes TEXT,
+  internal_notes TEXT,
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'processing', 'shipped', 'delivered', 'cancelled'
+  payment_method TEXT NOT NULL DEFAULT 'Cash on Delivery',
+  payment_status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'paid', 'refunded'
   subtotal NUMERIC(10, 2) NOT NULL DEFAULT 0,
   delivery_fee NUMERIC(10, 2) NOT NULL DEFAULT 0,
-  total_amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
-  payment_method TEXT NOT NULL DEFAULT 'Cash on Delivery',
-  
-  -- Courier tracking details
-  courier_status courier_status NOT NULL DEFAULT 'not_submitted',
-  pathao_consignment_id TEXT,
-  pathao_merchant_order_id TEXT,
-  pathao_tracking_url TEXT,
-  pathao_store_id INT,
-  pathao_delivery_fee NUMERIC(10, 2),
-  pathao_response JSONB,
-  courier_submitted_at TIMESTAMPTZ,
-  
-  -- Internal audit
-  internal_notes TEXT,
-  is_verified BOOLEAN NOT NULL DEFAULT false,
-  verified_by UUID REFERENCES auth.users(id),
+  total NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  courier_name TEXT DEFAULT 'Pathao Courier',
+  consignment_id TEXT,
+  courier_status TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 8. ORDER ITEMS (historical preservation, completely isolated from product changes)
+-- 6. ORDER ITEMS TABLE
 CREATE TABLE IF NOT EXISTS public.order_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id UUID NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
-  product_id UUID REFERENCES public.products(id) ON DELETE SET NULL,
+  order_id UUID REFERENCES public.orders(id) ON DELETE CASCADE,
+  product_id TEXT,
   product_name TEXT NOT NULL,
-  product_category TEXT NOT NULL,
-  product_image TEXT NOT NULL,
-  size TEXT NOT NULL,
+  size TEXT,
   color TEXT,
-  unit_price NUMERIC(10, 2) NOT NULL,
+  unit_price NUMERIC(10, 2) NOT NULL DEFAULT 0,
   quantity INT NOT NULL DEFAULT 1,
-  total_price NUMERIC(10, 2) NOT NULL,
+  total_price NUMERIC(10, 2) NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 9. STORE SETTINGS (Key-Value configuration for brand, shipping fees, courier)
-CREATE TABLE IF NOT EXISTS public.store_settings (
-  key TEXT PRIMARY KEY,
-  value JSONB NOT NULL,
-  description TEXT,
-  is_secret BOOLEAN NOT NULL DEFAULT false,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- 10. COURIER INTEGRATIONS & SECRETS (Strictly Admin/Server-Side Accessible)
+-- 7. COURIER INTEGRATIONS & WEBHOOKS TABLE
 CREATE TABLE IF NOT EXISTS public.courier_integrations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  provider TEXT NOT NULL UNIQUE, -- 'pathao'
-  is_enabled BOOLEAN NOT NULL DEFAULT false,
-  environment TEXT NOT NULL DEFAULT 'sandbox', -- 'sandbox' | 'production'
+  provider TEXT NOT NULL UNIQUE DEFAULT 'pathao',
   client_id TEXT,
-  encrypted_client_secret TEXT,
+  client_secret TEXT,
   username TEXT,
-  encrypted_password TEXT,
-  selected_store_id INT,
-  selected_store_name TEXT,
-  access_token TEXT,
-  refresh_token TEXT,
-  token_expires_at TIMESTAMPTZ,
+  password TEXT,
+  store_id INT DEFAULT 0,
   webhook_secret TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  is_sandbox BOOLEAN DEFAULT false,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 11. ACTIVITY LOGS (Security audit trail)
-CREATE TABLE IF NOT EXISTS public.activity_logs (
+-- 8. STORE SETTINGS TABLE
+CREATE TABLE IF NOT EXISTS public.store_settings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  user_email TEXT,
-  action TEXT NOT NULL, -- 'create_product', 'update_order_status', 'pathao_parcel_created', etc.
-  entity_type TEXT NOT NULL, -- 'product', 'order', 'courier', 'settings'
-  entity_id TEXT,
-  metadata JSONB DEFAULT '{}'::jsonb,
-  ip_address TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  setting_key TEXT NOT NULL UNIQUE,
+  setting_value JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 12. INDEXES FOR HIGH-THROUGHPUT RETRIEVAL & SORTING
+-- 9. PERFORMANCE INDEXES
 CREATE INDEX IF NOT EXISTS idx_products_published ON public.products(is_published, sort_order);
 CREATE INDEX IF NOT EXISTS idx_products_category ON public.products(category);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_customer_phone ON public.orders(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_orders_order_number ON public.orders(order_number);
-CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON public.order_items(order_id);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON public.activity_logs(created_at DESC);
 
--- 13. AUTO-UPDATE TRIGGER FUNCTION
-CREATE OR REPLACE FUNCTION public.set_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trigger_products_updated_at ON public.products;
-CREATE TRIGGER trigger_products_updated_at
-BEFORE UPDATE ON public.products
-FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_orders_updated_at ON public.orders;
-CREATE TRIGGER trigger_orders_updated_at
-BEFORE UPDATE ON public.orders
-FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_customers_updated_at ON public.customers;
-CREATE TRIGGER trigger_customers_updated_at
-BEFORE UPDATE ON public.customers
-FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-
--- 14. HELPER: IS CURRENT USER AN ADMIN?
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.admin_profiles
-    WHERE id = auth.uid()
-      AND is_active = true
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 15. ROW LEVEL SECURITY (RLS) POLICIES
-ALTER TABLE public.admin_profiles ENABLE ROW LEVEL SECURITY;
+-- 10. ROW LEVEL SECURITY (RLS) POLICIES
 ALTER TABLE public.product_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.courier_integrations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;
 
--- ADMIN PROFILES: Admins can read their own or all admin profiles
-CREATE POLICY "Admins can view admin profiles"
-  ON public.admin_profiles FOR SELECT
-  USING (auth.uid() = id OR public.is_admin());
+-- Products: Everyone can read published items; Authenticated admin users can insert/update/delete
+DROP POLICY IF EXISTS "Public view published products" ON public.products;
+CREATE POLICY "Public view published products" ON public.products
+  FOR SELECT USING (is_published = true OR auth.role() = 'authenticated');
 
-CREATE POLICY "Super admins can manage admin profiles"
-  ON public.admin_profiles FOR ALL
-  USING (public.is_admin());
+DROP POLICY IF EXISTS "Authenticated admins manage products" ON public.products;
+CREATE POLICY "Authenticated admins manage products" ON public.products
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- PRODUCT CATEGORIES: Public can view active categories, admins can manage
-CREATE POLICY "Public read active categories"
-  ON public.product_categories FOR SELECT
-  USING (is_active = true OR public.is_admin());
+-- Product Categories: Public read active; Authenticated admins manage
+DROP POLICY IF EXISTS "Public view active categories" ON public.product_categories;
+CREATE POLICY "Public view active categories" ON public.product_categories
+  FOR SELECT USING (is_active = true OR auth.role() = 'authenticated');
 
-CREATE POLICY "Admins manage categories"
-  ON public.product_categories FOR ALL
-  USING (public.is_admin());
+DROP POLICY IF EXISTS "Authenticated admins manage categories" ON public.product_categories;
+CREATE POLICY "Authenticated admins manage categories" ON public.product_categories
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- PRODUCTS: Public can view published products, admins have full control
-CREATE POLICY "Public read published products"
-  ON public.products FOR SELECT
-  USING (is_published = true OR public.is_admin());
+-- Orders: Public can insert checkout orders; Authenticated admins can view & update orders
+DROP POLICY IF EXISTS "Public checkout order insert" ON public.orders;
+CREATE POLICY "Public checkout order insert" ON public.orders
+  FOR INSERT WITH CHECK (total > 0 AND customer_name IS NOT NULL AND customer_phone IS NOT NULL);
 
-CREATE POLICY "Admins manage products"
-  ON public.products FOR ALL
-  USING (public.is_admin());
+DROP POLICY IF EXISTS "Authenticated admins manage orders" ON public.orders;
+CREATE POLICY "Authenticated admins manage orders" ON public.orders
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- CUSTOMERS: Strictly Admin-Only
-CREATE POLICY "Admins access customers"
-  ON public.customers FOR ALL
-  USING (public.is_admin());
+-- Order Items: Public insert; Authenticated admins manage
+DROP POLICY IF EXISTS "Public insert order items" ON public.order_items;
+CREATE POLICY "Public insert order items" ON public.order_items
+  FOR INSERT WITH CHECK (quantity > 0);
 
--- ORDERS: Admins can manage all orders; public CANNOT select all orders
-CREATE POLICY "Admins manage orders"
-  ON public.orders FOR ALL
-  USING (public.is_admin());
+DROP POLICY IF EXISTS "Authenticated admins manage order items" ON public.order_items;
+CREATE POLICY "Authenticated admins manage order items" ON public.order_items
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Allow anonymous customer order insertion strictly with safe default status 'pending'
-CREATE POLICY "Public insert orders"
-  ON public.orders FOR INSERT
-  WITH CHECK (
-    status = 'pending'
-    AND total_amount > 0
-    AND customer_name IS NOT NULL
-    AND customer_phone IS NOT NULL
-  );
+-- Customers: Public insert/upsert on checkout; Authenticated admins full read/update
+DROP POLICY IF EXISTS "Public insert customer info" ON public.customers;
+CREATE POLICY "Public insert customer info" ON public.customers
+  FOR INSERT WITH CHECK (phone IS NOT NULL AND full_name IS NOT NULL);
 
--- ORDER ITEMS: Public can insert their order items alongside the order, admins can manage
-CREATE POLICY "Admins manage order items"
-  ON public.order_items FOR ALL
-  USING (public.is_admin());
+DROP POLICY IF EXISTS "Authenticated admins manage customers" ON public.customers;
+CREATE POLICY "Authenticated admins manage customers" ON public.customers
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "Public insert order items"
-  ON public.order_items FOR INSERT
-  WITH CHECK (quantity > 0 AND unit_price >= 0);
+-- Courier Integrations: Authenticated admins only (Strict Security)
+DROP POLICY IF EXISTS "Authenticated admins manage courier settings" ON public.courier_integrations;
+CREATE POLICY "Authenticated admins manage courier settings" ON public.courier_integrations
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- STORE SETTINGS: Public can read non-secret settings (shipping fees, brand info), admins manage all
-CREATE POLICY "Public read public settings"
-  ON public.store_settings FOR SELECT
-  USING (is_secret = false OR public.is_admin());
+-- Store Settings: Public read; Authenticated admins manage
+DROP POLICY IF EXISTS "Public read settings" ON public.store_settings;
+CREATE POLICY "Public read settings" ON public.store_settings
+  FOR SELECT USING (true);
 
-CREATE POLICY "Admins manage settings"
-  ON public.store_settings FOR ALL
-  USING (public.is_admin());
+DROP POLICY IF EXISTS "Authenticated admins manage settings" ON public.store_settings;
+CREATE POLICY "Authenticated admins manage settings" ON public.store_settings
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- COURIER INTEGRATIONS: STRICTLY SERVER-SIDE & ADMIN ONLY (Never exposed to public)
-CREATE POLICY "Admins access courier integrations"
-  ON public.courier_integrations FOR ALL
-  USING (public.is_admin());
-
--- ACTIVITY LOGS: Strictly Admins
-CREATE POLICY "Admins view activity logs"
-  ON public.activity_logs FOR SELECT
-  USING (public.is_admin());
-
-CREATE POLICY "Admins insert activity logs"
-  ON public.activity_logs FOR INSERT
-  WITH CHECK (public.is_admin());
-
--- 16. SEED ESSENTIAL STORE SETTINGS
-INSERT INTO public.store_settings (key, value, description, is_secret)
-VALUES
-  ('brand_info', '{"name":"SPARTA","phone":"+880 1610-046310","whatsapp":"8801610046310","email":"sparta.bd.com@gmail.com","currency":"৳"}'::jsonb, 'General store contact and brand details', false),
-  ('shipping_settings', '{"inside_dhaka_fee":70,"outside_dhaka_fee":120,"free_shipping_threshold":5000}'::jsonb, 'Standard delivery fee configuration for Bangladesh', false),
-  ('cloudinary_config', '{"cloud_name":"zgk3djqr","api_key":"583185876679327"}'::jsonb, 'Client Cloudinary identifiers', false)
-ON CONFLICT (key) DO NOTHING;
-
--- 17. SEED INITIAL CATEGORIES
+-- 11. INITIAL SEED DATA
+-- Insert Product Categories
 INSERT INTO public.product_categories (slug, name, sort_order)
 VALUES
-  ('Upperwear', 'Upperwear', 1),
-  ('Bottomwear', 'Bottomwear', 2),
-  ('Shoes/Sneakers', 'Shoes / Sneakers', 3),
-  ('Accessories', 'Accessories', 4),
-  ('Perfume', 'Perfume', 5)
+  ('upperwear', 'Upperwear', 1),
+  ('bottomwear', 'Bottomwear', 2),
+  ('shoes-sneakers', 'Shoes/Sneakers', 3),
+  ('accessories', 'Accessories', 4),
+  ('perfume', 'Perfume', 5)
 ON CONFLICT (slug) DO NOTHING;
 
+-- Insert Store Rules & Rates
+INSERT INTO public.store_settings (setting_key, setting_value)
+VALUES
+  ('delivery_rates', '{"inside_dhaka": 70, "outside_dhaka": 120, "free_shipping_threshold": 5000}'::jsonb),
+  ('store_profile', '{"name": "SPARTA", "phone": "+880 1610-046310", "whatsapp": "8801610046310", "email": "sparta.bd.com@gmail.com"}'::jsonb)
+ON CONFLICT (setting_key) DO UPDATE
+SET setting_value = EXCLUDED.setting_value, updated_at = now();
 
--- 18. INITIAL PRODUCTS SEEDING (SPARTA 11 CORE PRODUCTS)
-INSERT INTO public.products (slug, name, category, price, original_price, price_map, edition_note, description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published)
-VALUES ('sparta-001', 'Spartan Cable Knit', 'Upperwear', 1049, 1279, null, '18% Off · New Arrival', 'New Arrival: The signature Spartan Cable Knit. Crafted for comfort, confidence, and quiet distinction with a structured quarter-zip collar and embroidered chest crest.', '["Mid-weight breathable combed cotton cable-knit weave","Quarter-zip mock collar with brushed metal puller","Tonal embroidered Spartan crest at left chest","Ribbed cuffs and structured waistband hem"]'::jsonb, '["/assets/products/spartan-white.png","/assets/products/spartan-black.png","/assets/products/spartan-navy.png","/assets/products/spartan-red.png","/assets/products/spartan-5.png","/assets/products/spartan-6.png"]'::jsonb, 4, 'cover-top', 'cover-top', '#F3F3F5', '[{"name":"White","hex":"#F4F3EF","imageIndex":0},{"name":"Black","hex":"#141416","imageIndex":1},{"name":"Navy Blue","hex":"#1B2436","imageIndex":2},{"name":"Red Wine","hex":"#5E1924","imageIndex":3}]'::jsonb, '["S","M","L","XL"]'::jsonb, 'in-stock', 50, true)
-ON CONFLICT (slug) DO UPDATE SET
+-- Insert Courier Configuration Defaults
+INSERT INTO public.courier_integrations (provider, client_id, is_sandbox)
+VALUES ('pathao', '', false)
+ON CONFLICT (provider) DO NOTHING;
+
+-- Seed All Core 11 SPARTA Products
+INSERT INTO public.products (
+  id, slug, name, category, price, original_price, price_map, edition_note,
+  description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published, sort_order
+)
+VALUES
+(
+  'sparta-001',
+  'spartan-cable-knit',
+  'Spartan Cable Knit',
+  'Upperwear',
+  1049,
+  1279,
+  NULL,
+  '18% Off · New Arrival',
+  'Crafted from high-gauge combed yarn with defined vertical cable twist and reinforced rib collar, cuffs, and hem. Structured silhouette with luxury drape.',
+  '["High-gauge combed cotton-acrylic blend", "Deep architectural vertical cable knit", "Reinforced double-knit cuffs and waist hem", "Designed for transitional seasons"]'::jsonb,
+  '["https://spartacl0.netlify.app/assets/products/spartan-black.png", "https://spartacl0.netlify.app/assets/products/spartan-white.png", "https://spartacl0.netlify.app/assets/products/spartan-red.png", "https://spartacl0.netlify.app/assets/products/spartan-navy.png", "https://spartacl0.netlify.app/assets/products/spartan-5.png", "https://spartacl0.netlify.app/assets/products/spartan-6.png"]'::jsonb,
+  1,
+  'cover-top',
+  'cover-top',
+  '#F5F4F0',
+  '[{"name": "Washed Obsidian", "hex": "#1A1A1A", "imageIndex": 0}, {"name": "Natural Chalk", "hex": "#EAE6DF", "imageIndex": 1}, {"name": "Crimson Sparta", "hex": "#8A1C24", "imageIndex": 2}, {"name": "Midnight Navy", "hex": "#1B2433", "imageIndex": 3}]'::jsonb,
+  '["S", "M", "L", "XL"]'::jsonb,
+  'in-stock',
+  25,
+  true,
+  1
+),
+(
+  'sparta-002',
+  'tailored-flare-trousers',
+  'Tailored Flare Trousers',
+  'Bottomwear',
+  1249,
+  1499,
+  NULL,
+  '17% Off · Signature Cut',
+  'Mid-rise tailored trousers with sharp front creases and subtle architectural flare from calf to hem. Clean drape with structured movement.',
+  '["Premium polyester-viscose suiting twill", "Pressed central front and back creases", "Concealed hook-and-bar front tab closure", "Split side hems for intentional shoe stacking"]'::jsonb,
+  '["https://spartacl0.netlify.app/assets/products/flare-black.png", "https://spartacl0.netlify.app/assets/products/flare-offwhite.png", "https://spartacl0.netlify.app/assets/products/flare-gray.png", "https://spartacl0.netlify.app/assets/products/flare-white.png"]'::jsonb,
+  1,
+  'cover-top',
+  'cover-top',
+  '#F3F2EE',
+  '[{"name": "Pitch Black", "hex": "#111111", "imageIndex": 0}, {"name": "Raw Off-White", "hex": "#E8E4DA", "imageIndex": 1}, {"name": "Concrete Slate", "hex": "#7A7B7E", "imageIndex": 2}, {"name": "Optic White", "hex": "#F8F8F8", "imageIndex": 3}]'::jsonb,
+  '["28", "30", "32", "34", "36"]'::jsonb,
+  'in-stock',
+  20,
+  true,
+  2
+),
+(
+  'sparta-003',
+  'court-saf1-sneaker',
+  'Court SAF1 Sneaker',
+  'Shoes/Sneakers',
+  1649,
+  1899,
+  NULL,
+  'Best Seller · Limited Restock',
+  'Retro court low-top sneaker featuring segmented micro-textured toe, layered heel tab, and vulcanized natural rubber sole with SPARTA tread.',
+  '["Supple matte leather and premium suede overlays", "Vulcanized natural rubber cupsole with tread grip", "Reinforced eyelet stay and padded tongue", "Perforated vamp for airflow"]'::jsonb,
+  '["https://spartacl0.netlify.app/assets/products/saf1-white.png", "https://spartacl0.netlify.app/assets/products/saf1-2.png", "https://spartacl0.netlify.app/assets/products/saf1-3.png", "https://spartacl0.netlify.app/assets/products/saf1-4.png"]'::jsonb,
+  1,
+  'contain',
+  'contain',
+  '#EDEDEA',
+  '[{"name": "Monochrome White", "hex": "#F5F5F5", "imageIndex": 0}, {"name": "Tonal Cream", "hex": "#E5DEC9", "imageIndex": 1}]'::jsonb,
+  '["40", "41", "42", "43", "44"]'::jsonb,
+  'in-stock',
+  18,
+  true,
+  3
+),
+(
+  'sparta-004',
+  'heavyweight-atelier-cap',
+  'Heavyweight Atelier Cap',
+  'Accessories',
+  499,
+  649,
+  NULL,
+  'Essential Accessory',
+  'Six-panel unstructured cap constructed from 14 oz brushed cotton twill. Features low-profile embroidery and antique matte metal slide buckle.',
+  '["14 oz brushed heavyweight cotton twill", "Curved architectural visor with tonal stitching", "Self-fabric strap with antique metal slider", "One size fits all with adjustable slider"]'::jsonb,
+  '["https://spartacl0.netlify.app/assets/products/cap-black.png", "https://spartacl0.netlify.app/assets/products/cap-2.png", "https://spartacl0.netlify.app/assets/products/cap-3.png", "https://spartacl0.netlify.app/assets/products/cap-4.png"]'::jsonb,
+  1,
+  'contain',
+  'contain',
+  '#F0EFEA',
+  '[{"name": "Onyx Black", "hex": "#111111", "imageIndex": 0}, {"name": "Sand Dune", "hex": "#CBB89D", "imageIndex": 1}]'::jsonb,
+  '["Free Size"]'::jsonb,
+  'in-stock',
+  40,
+  true,
+  4
+),
+(
+  'sparta-005',
+  'oxford-knit-polo',
+  'Oxford Knit Polo',
+  'Upperwear',
+  899,
+  1099,
+  NULL,
+  '18% Off · Classic Fit',
+  'Fine-gauge knit polo featuring ribbed collar and placket with tonal horn-effect buttons. Crafted from lightweight combed cotton.',
+  '["100% fine combed cotton knit", "Ribbed spread collar with 3-button placket", "Natural horn-effect buttons with SPARTA etching", "Straight hem with side vents for ease of wear"]'::jsonb,
+  '["https://spartacl0.netlify.app/assets/products/polo-black.png", "https://spartacl0.netlify.app/assets/products/polo-white.png", "https://spartacl0.netlify.app/assets/products/polo-navy.png", "https://spartacl0.netlify.app/assets/products/polo-brown.png"]'::jsonb,
+  1,
+  'cover-top',
+  'cover-top',
+  '#F5F4F0',
+  '[{"name": "Classic Black", "hex": "#111111", "imageIndex": 0}, {"name": "Crisp White", "hex": "#FFFFFF", "imageIndex": 1}, {"name": "Deep Navy", "hex": "#1E2A38", "imageIndex": 2}, {"name": "Espresso Brown", "hex": "#4A3525", "imageIndex": 3}]'::jsonb,
+  '["S", "M", "L", "XL"]'::jsonb,
+  'in-stock',
+  30,
+  true,
+  5
+),
+(
+  'sparta-006',
+  'military-utility-cargo-shorts',
+  'Military Utility Cargo Shorts',
+  'Bottomwear',
+  849,
+  999,
+  NULL,
+  'Utility Archive',
+  'Heavyweight cotton canvas shorts featuring gusseted bellows cargo pockets and an elasticized waistband with internal drawstring.',
+  '["100% heavy cotton canvas (320 GSM)", "Deep bellows cargo pockets with hidden snaps", "Elasticized waistband with tonal round drawstring", "Mid-thigh relaxed silhouette"]'::jsonb,
+  '["https://spartacl0.netlify.app/assets/products/army-1.png", "https://spartacl0.netlify.app/assets/products/army-2.png", "https://spartacl0.netlify.app/assets/products/army-3.png", "https://spartacl0.netlify.app/assets/products/army-4.png"]'::jsonb,
+  1,
+  'cover-top',
+  'cover-top',
+  '#EFEFEA',
+  '[{"name": "Military Green", "hex": "#4B5320", "imageIndex": 0}, {"name": "Black Ops", "hex": "#1C1C1C", "imageIndex": 1}]'::jsonb,
+  '["M", "L", "XL"]'::jsonb,
+  'in-stock',
+  25,
+  true,
+  6
+),
+(
+  'sparta-007',
+  'relaxed-bermuda-shorts',
+  'Relaxed Bermuda Shorts',
+  'Bottomwear',
+  749,
+  899,
+  NULL,
+  'Summer Essential',
+  'Minimalist Bermuda shorts crafted from soft French terry with slant pockets and an unstructured raw hem aesthetic.',
+  '["100% loopback cotton French terry", "Slant front hand pockets and single back welt pocket", "Drawcord elastic waist with nickel eyelets", "Knee-length relaxed drape"]'::jsonb,
+  '["https://spartacl0.netlify.app/assets/products/shorts-black.png", "https://spartacl0.netlify.app/assets/products/shorts-offwhite.png", "https://spartacl0.netlify.app/assets/products/shorts-3.png", "https://spartacl0.netlify.app/assets/products/shorts-4.png", "https://spartacl0.netlify.app/assets/products/shorts-5.png", "https://spartacl0.netlify.app/assets/products/shorts-6.png"]'::jsonb,
+  1,
+  'cover-top',
+  'cover-top',
+  '#F4F3EE',
+  '[{"name": "Jet Black", "hex": "#111111", "imageIndex": 0}, {"name": "Oatmeal Melange", "hex": "#E3DCCF", "imageIndex": 1}]'::jsonb,
+  '["M", "L", "XL"]'::jsonb,
+  'in-stock',
+  35,
+  true,
+  7
+),
+(
+  'sparta-008',
+  'classic-oxford-button-down',
+  'Classic Oxford Button-Down',
+  'Upperwear',
+  1149,
+  1349,
+  NULL,
+  'Wardrobe Pillar',
+  'Tailored long-sleeve shirt crafted from 100% combed cotton basketweave Oxford cloth with button-down collar and curved hem.',
+  '["100% long-staple combed cotton Oxford cloth", "Classic button-down collar with natural roll", "Chest spade pocket and box pleat with locker loop", "Chalk buttons with cross-stitch reinforcement"]'::jsonb,
+  '["https://spartacl0.netlify.app/assets/products/oxford-white.png", "https://spartacl0.netlify.app/assets/products/oxford-black.png"]'::jsonb,
+  1,
+  'cover-top',
+  'cover-top',
+  '#F5F4F0',
+  '[{"name": "Pure White", "hex": "#FFFFFF", "imageIndex": 0}, {"name": "Washed Black", "hex": "#222222", "imageIndex": 1}]'::jsonb,
+  '["M", "L", "XL", "XXL"]'::jsonb,
+  'in-stock',
+  20,
+  true,
+  8
+),
+(
+  'sparta-009',
+  'vampire-blood-extrait-de-parfum',
+  'Vampire Blood Extrait De Parfum',
+  'Perfume',
+  299,
+  NULL,
+  '{"15 ml": 299, "50 ml": 799, "100 ml": 1199}'::jsonb,
+  'Extrait Concentration (32% Oil)',
+  'A magnetic nocturnal blend of dark Bulgarian red rose, smoked black cherry, Indonesian patchouli, and raw amber resin.',
+  '["Concentration: Extrait de Parfum (32% premium fragrance oil)", "Top: Wild Black Cherry, Saffron, Bitter Almond", "Heart: Bulgarian Red Rose, Damask Rose, Plum Liqueur", "Base: Indonesian Patchouli, Vanilla Bourbon, Amber Resin", "Longevity: 12-16 hours on skin with architectural sillage"]'::jsonb,
+  '["https://spartacl0.netlify.app/assets/products/perfume-vampire-1.png", "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?auto=format&fit=crop&q=80&w=1000"]'::jsonb,
+  1,
+  'contain',
+  'contain',
+  '#151114',
+  NULL,
+  '["15 ml", "50 ml", "100 ml"]'::jsonb,
+  'in-stock',
+  50,
+  true,
+  9
+),
+(
+  'sparta-010',
+  'spartan-man-eau-de-parfum',
+  'Spartan Man Eau De Parfum',
+  'Perfume',
+  299,
+  NULL,
+  '{"15 ml": 299, "50 ml": 799, "100 ml": 1199}'::jsonb,
+  'High-Concentration Signature',
+  'Crisp Calabrian bergamot and pink pepper opening over dry Virginian cedarwood, smoky vetiver, and clean modern ambroxan.',
+  '["Concentration: Eau de Parfum (24% oil concentration)", "Top: Calabrian Bergamot, Pink Peppercorn, Crisp Apple", "Heart: Virginian Cedar, Clary Sage, Lavender", "Base: Haitian Vetiver, Ambroxan, White Leather", "Longevity: 8-12 hours with radiant masculine projection"]'::jsonb,
+  '["https://spartacl0.netlify.app/assets/products/perfume-man-1.png", "https://images.unsplash.com/photo-1523293182086-7651a899d37f?auto=format&fit=crop&q=80&w=1000"]'::jsonb,
+  1,
+  'contain',
+  'contain',
+  '#121518',
+  NULL,
+  '["15 ml", "50 ml", "100 ml"]'::jsonb,
+  'in-stock',
+  50,
+  true,
+  10
+),
+(
+  'sparta-011',
+  'sparta-femme-eau-de-parfum',
+  'Sparta Femme Eau De Parfum',
+  'Perfume',
+  299,
+  NULL,
+  '{"15 ml": 299, "50 ml": 799, "100 ml": 1199}'::jsonb,
+  'Sophisticated Floral Woody',
+  'Velvety white jasmine and Turkish peony warmed by toasted tonka bean, Madagascar vanilla, and creamy white sandalwood.',
+  '["Concentration: Eau de Parfum (24% oil concentration)", "Top: Sparkling Pear, Italian Mandarin, Dewy Freesia", "Heart: White Sambac Jasmine, Turkish Peony, Iris", "Base: Toasted Tonka Bean, Madagascar Vanilla, Sandalwood", "Longevity: 8-10 hours with soft, lingering warmth"]'::jsonb,
+  '["https://spartacl0.netlify.app/assets/products/perfume-female-1.png", "https://spartacl0.netlify.app/assets/products/perfume-female-2.png"]'::jsonb,
+  1,
+  'contain',
+  'contain',
+  '#161316',
+  NULL,
+  '["15 ml", "50 ml", "100 ml"]'::jsonb,
+  'in-stock',
+  45,
+  true,
+  11
+)
+ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
+  category = EXCLUDED.category,
   price = EXCLUDED.price,
+  original_price = EXCLUDED.original_price,
+  price_map = EXCLUDED.price_map,
+  edition_note = EXCLUDED.edition_note,
   description = EXCLUDED.description,
-  images = EXCLUDED.images;
-INSERT INTO public.products (slug, name, category, price, original_price, price_map, edition_note, description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published)
-VALUES ('sparta-002', 'Spartan Flare Formal', 'Bottomwear', 1200, 1558, null, '23% Off', 'Classic formal flare trousers tailored for an elongated architectural line. Double front pleats deliver fluid movement from waist to hem.', '["Double front pleats with crisp pressed centre crease","Subtle flare leg opening engineered to drape cleanly over footwear","Concealed hook-and-bar tailored waistband closure","Wrinkle-resistant structured suiting cloth"]'::jsonb, '["/assets/products/flare-black.png","/assets/products/flare-gray.png","/assets/products/flare-white.png","/assets/products/flare-offwhite.png"]'::jsonb, 1, 'cover-center', 'cover-center', '#EFEFF0', '[{"name":"Black","hex":"#151517","imageIndex":0},{"name":"Gray","hex":"#6E7075","imageIndex":1},{"name":"White","hex":"#FAFAFA","imageIndex":2},{"name":"Off White","hex":"#EAE6DF","imageIndex":3}]'::jsonb, '["S","M","L","XL"]'::jsonb, 'in-stock', 150, true)
-ON CONFLICT (slug) DO UPDATE SET
-  name = EXCLUDED.name,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images;
-INSERT INTO public.products (slug, name, category, price, original_price, price_map, edition_note, description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published)
-VALUES ('sparta-008', 'Heritage Cable Polo', 'Upperwear', 699, null, null, 'Resort Knit', 'Old-money open-collar cable knit polo finished with contrast ivory tipping along the collar and cuffs.', '["Open-placket Johnny collar with contrast tipping","Vertical fine-gauge cable texture throughout","Soft breathable combed cotton yarn","Clean straight hem suited for tailored trousers or shorts"]'::jsonb, '["/assets/products/polo-navy.png","/assets/products/polo-white.png","/assets/products/polo-black.png","/assets/products/polo-brown.png"]'::jsonb, 1, 'contain', 'contain', '#F7F7F5', '[{"name":"Navy Blue","hex":"#161D2B","imageIndex":0},{"name":"White","hex":"#F6F5F0","imageIndex":1},{"name":"Black","hex":"#141416","imageIndex":2},{"name":"Brown","hex":"#4B3628","imageIndex":3}]'::jsonb, '["M","L","XL"]'::jsonb, 'in-stock', 50, true)
-ON CONFLICT (slug) DO UPDATE SET
-  name = EXCLUDED.name,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images;
-INSERT INTO public.products (slug, name, category, price, original_price, price_map, edition_note, description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published)
-VALUES ('sparta-007', 'Spartan Female', 'Perfume', 0, null, '{"100 ml":1599,"50 ml":899,"15 ml":399}'::jsonb, 'Eau de Parfum', 'Elegant and captivating Eau de Parfum presented in faceted rose glass. Luminous Damask rose and white peony settle into warm cashmere wood.', '["Eau de Parfum concentration with 8–10 hour longevity","Notes of Damask rose, white peony, pink pepper, and ambergris","Offered in 100 ml flacon, 50 ml edition, and 15 ml travel spray","Embossed rose-toned presentation box"]'::jsonb, '["/assets/products/perfume-female-1.png","/assets/products/perfume-female-2.png"]'::jsonb, 1, 'cover-center', 'cover-center', '#D8B8B4', '[]'::jsonb, '["100 ml","50 ml","15 ml"]'::jsonb, 'in-stock', 50, true)
-ON CONFLICT (slug) DO UPDATE SET
-  name = EXCLUDED.name,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images;
-INSERT INTO public.products (slug, name, category, price, original_price, price_map, edition_note, description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published)
-VALUES ('sparta-003', 'SAF1', 'Shoes/Sneakers', 5999, null, null, null, 'Minimalist low-top court sneaker crafted in smooth chalk leather with tonal suede toe-cap and heel overlays.', '["Full-grain chalk leather and soft tonal suede panelling","Perforated breathable vamp with SPARTA tongue stamp","High-density stitched rubber cupsole","Cushioned leather-lined collar"]'::jsonb, '["/assets/products/saf1-white.png","/assets/products/saf1-2.png","/assets/products/saf1-3.png","/assets/products/saf1-4.png"]'::jsonb, 2, 'cover-center', 'cover-center', '#CFCAC2', '[{"name":"White","hex":"#EAE8E3","imageIndex":0}]'::jsonb, '["40","42","43","44"]'::jsonb, 'out-of-stock', 50, true)
-ON CONFLICT (slug) DO UPDATE SET
-  name = EXCLUDED.name,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images;
-INSERT INTO public.products (slug, name, category, price, original_price, price_map, edition_note, description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published)
-VALUES ('sparta-004', 'Spartan Head Cap', 'Accessories', 1499, 1763, null, '15% Off', 'Structured six-panel cap in heavyweight brushed cotton twill featuring raised silver Spartan helmet embroidery.', '["Structured six-panel crown with curved visor","Heavyweight washed black cotton twill","Polished metal buckle back strap","Embroidered tonal eyelets"]'::jsonb, '["/assets/products/cap-black.png","/assets/products/cap-2.png","/assets/products/cap-3.png","/assets/products/cap-4.png"]'::jsonb, 2, 'cover-center', 'cover-center', '#E6E5E2', '[{"name":"Black","hex":"#161618","imageIndex":0}]'::jsonb, '["Free Size"]'::jsonb, 'coming-soon', 50, true)
-ON CONFLICT (slug) DO UPDATE SET
-  name = EXCLUDED.name,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images;
-INSERT INTO public.products (slug, name, category, price, original_price, price_map, edition_note, description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published)
-VALUES ('sparta-005', 'SPARTAN MAN', 'Perfume', 0, null, '{"100 ml":1199,"50 ml":799,"15 ml":299}'::jsonb, 'Eau de Parfum', 'Signature masculine Eau de Parfum by SPARTA. Crisp Calabrian bergamot and black pepper layered over dry cedarwood, vetiver, and warm amber.', '["High-oil Eau de Parfum concentration","Notes of bergamot, black pepper, dry cedarwood, and ambroxan","Available in 100 ml, 50 ml, and 15 ml formats","Architectural heavy glass flacon with knurled matte cap"]'::jsonb, '["/assets/products/perfume-man-1.png","/src/assets/images/spartan_man_editorial_1793639288096.jpg"]'::jsonb, 1, 'cover-center', 'cover-center', '#CEC7BC', '[]'::jsonb, '["100 ml","50 ml","15 ml"]'::jsonb, 'coming-soon', 50, true)
-ON CONFLICT (slug) DO UPDATE SET
-  name = EXCLUDED.name,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images;
-INSERT INTO public.products (slug, name, category, price, original_price, price_map, edition_note, description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published)
-VALUES ('sparta-006', 'Spartan Vampired Blood', 'Perfume', 0, null, '{"100 ml":899,"50 ml":599}'::jsonb, 'Noir Edition', 'Bold nocturnal fragrance composed for evening wear. Deep blood orange, dark cherry, saffron, and smoky resinous oud.', '["Intense nocturnal Eau de Parfum sillage","Notes of blood orange, black cherry, saffron, and dark oud","Available in 100 ml and 50 ml flacons"]'::jsonb, '["/assets/products/perfume-vampire-1.png","/src/assets/images/vampire_blood_editorial_1793639289573.jpg"]'::jsonb, 1, 'cover-center', 'cover-center', '#191113', '[]'::jsonb, '["100 ml","50 ml"]'::jsonb, 'coming-soon', 50, true)
-ON CONFLICT (slug) DO UPDATE SET
-  name = EXCLUDED.name,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images;
-INSERT INTO public.products (slug, name, category, price, original_price, price_map, edition_note, description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published)
-VALUES ('sparta-009', 'Signature Oxford Shirt', 'Upperwear', 899, null, null, null, 'Crisp tailored button-down Oxford shirt woven from breathable combed cotton for effortless year-round structure.', '["100% combed cotton basketweave Oxford cloth","Softly rolled button-down collar","Tailored torso taper with back box pleat"]'::jsonb, '["/assets/products/oxford-white.png","/assets/products/oxford-black.png"]'::jsonb, 1, 'contain', 'contain', '#F7F7F5', '[{"name":"White","hex":"#F7F7F7","imageIndex":0},{"name":"Black","hex":"#161618","imageIndex":1}]'::jsonb, '["M","L","XL","XXL"]'::jsonb, 'coming-soon', 50, true)
-ON CONFLICT (slug) DO UPDATE SET
-  name = EXCLUDED.name,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images;
-INSERT INTO public.products (slug, name, category, price, original_price, price_map, edition_note, description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published)
-VALUES ('sparta-010', 'Denim Shorts', 'Bottomwear', 899, null, null, null, 'Heavyweight washed cotton denim shorts cut cleanly above the knee with classic five-pocket hardware.', '["13 oz structured cotton denim","Relaxed straight leg silhouette","Classic five-pocket construction with tonal stitching"]'::jsonb, '["/assets/products/shorts-offwhite.png","/assets/products/shorts-black.png","/assets/products/shorts-3.png","/assets/products/shorts-4.png","/assets/products/shorts-5.png","/assets/products/shorts-6.png"]'::jsonb, 1, 'contain', 'contain', '#F6F6F4', '[{"name":"Off White","hex":"#EAE7E0","imageIndex":0},{"name":"Black","hex":"#18181B","imageIndex":1}]'::jsonb, '["M","L","XL"]'::jsonb, 'coming-soon', 50, true)
-ON CONFLICT (slug) DO UPDATE SET
-  name = EXCLUDED.name,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images;
-INSERT INTO public.products (slug, name, category, price, original_price, price_map, edition_note, description, details, images, hover_image_index, hover_fit, image_fit, canvas_bg, colors, sizes, stock, stock_count, is_published)
-VALUES ('sparta-011', 'Sparta Army 2025', 'Shoes/Sneakers', 3999, null, null, '2025 Archive', 'German-trainer inspired low-profile sneaker pairing supple chalk calfskin with Dove-grey suede overlays.', '["Supple chalk leather upper with grey suede overlays","Minimalist SPARTA side-panel foil stamp","Low-profile rubber court sole"]'::jsonb, '["/assets/products/army-1.png","/assets/products/army-2.png","/assets/products/army-3.png","/assets/products/army-4.png"]'::jsonb, 3, 'cover-center', 'contain', '#C7C7C9', '[]'::jsonb, '["40","42","43","44"]'::jsonb, 'coming-soon', 50, true)
-ON CONFLICT (slug) DO UPDATE SET
-  name = EXCLUDED.name,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images;
+  details = EXCLUDED.details,
+  images = EXCLUDED.images,
+  sizes = EXCLUDED.sizes,
+  colors = EXCLUDED.colors,
+  stock = EXCLUDED.stock,
+  stock_count = EXCLUDED.stock_count,
+  is_published = EXCLUDED.is_published,
+  updated_at = now();

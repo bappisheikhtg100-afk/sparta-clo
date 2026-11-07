@@ -16,6 +16,7 @@ import { Product, Category, StockStatus } from '../types/store';
 import { uploadToCloudinary } from '../services/cloudinaryService';
 import { upsertProduct, deleteProduct, toggleProductPublish } from '../services/productService';
 import { formatBDT } from '../data/storeData';
+import { useStore } from '../context/StoreContext';
 
 interface ProductManagementProps {
   products: (Product & { is_published?: boolean })[];
@@ -30,6 +31,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   isCreateModalOpen: initialModalOpen = false,
   onCloseCreateModal,
 }) => {
+  const { refreshProducts } = useStore();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -148,6 +150,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
       };
 
       await upsertProduct(productPayload, true);
+      await refreshProducts();
       setIsModalOpen(false);
       if (onCloseCreateModal) onCloseCreateModal();
       onRefresh();
@@ -161,12 +164,14 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   const handleDelete = async (productId: string) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
       await deleteProduct(productId);
+      await refreshProducts();
       onRefresh();
     }
   };
 
   const handleTogglePublish = async (productId: string, current: boolean) => {
     await toggleProductPublish(productId, !current);
+    await refreshProducts();
     onRefresh();
   };
 

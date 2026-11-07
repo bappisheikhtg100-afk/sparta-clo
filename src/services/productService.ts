@@ -25,7 +25,7 @@ function mapDbRowToProduct(row: any): Product {
     colors: row.colors || undefined,
     category: row.category as Exclude<Category, 'All'>,
     sizes: Array.isArray(row.sizes) ? row.sizes : [],
-    stock: (row.stock_status as StockStatus) || 'in-stock',
+    stock: (row.stock as StockStatus) || (row.stock_status as StockStatus) || 'in-stock',
     stockCount: row.stock_count ?? undefined,
     imageFit: row.image_fit ?? undefined,
     canvasBg: row.canvas_bg ?? undefined,
@@ -42,17 +42,17 @@ function mapProductToDbRow(product: Product, isPublished = true) {
     original_price: product.originalPrice ?? null,
     price_map: product.priceMap ?? null,
     edition_note: product.editionNote ?? null,
-    description: product.description,
-    details: product.details,
-    images: product.images,
+    description: product.description || '',
+    details: product.details || [],
+    images: product.images || [],
     hover_image_index: product.hoverImageIndex ?? 1,
     hover_fit: product.hoverFit ?? 'cover-top',
     colors: product.colors ?? null,
-    sizes: product.sizes,
-    stock_status: product.stock,
-    stock_count: product.stockCount ?? 10,
+    sizes: product.sizes || [],
+    stock: product.stock || 'in-stock',
+    stock_count: product.stockCount ?? 15,
     image_fit: product.imageFit ?? 'cover-top',
-    canvas_bg: product.canvasBg ?? null,
+    canvas_bg: product.canvasBg ?? '#F2F1EE',
     is_published: isPublished,
   };
 }
@@ -87,7 +87,7 @@ export async function fetchPublishedProducts(): Promise<Product[]> {
       .from('products')
       .select('*')
       .eq('is_published', true)
-      .order('display_order', { ascending: true });
+      .order('sort_order', { ascending: true });
 
     if (!error && data && data.length > 0) {
       const live = data.map(mapDbRowToProduct);
@@ -125,21 +125,12 @@ export async function fetchAdminProducts(): Promise<(Product & { is_published: b
 }
 
 /**
- * Save or update a product in database
+ * Save or update a product in database and local cache
  */
 export async function upsertProduct(product: Product, isPublished = true): Promise<void> {
   const row = mapProductToDbRow(product, isPublished);
 
-  try {
-    const { error } = await supabase.from('products').upsert(row);
-    if (error) {
-      console.warn('Supabase product upsert warning:', error.message);
-    }
-  } catch (err) {
-    console.warn('Supabase product upsert exception:', err);
-  }
-
-  // Update local store cache
+  // 1. Immediately update local store cache for instant UI feedback
   const current = getLocalStoredProducts();
   const existingIdx = current.findIndex((p) => p.id === product.id);
   let updated: Product[];
@@ -150,20 +141,30 @@ export async function upsertProduct(product: Product, isPublished = true): Promi
     updated = [product, ...current];
   }
   saveLocalStoredProducts(updated);
+
+  // 2. Persist to Supabase products table
+  try {
+    const { error } = await supabase.from('products').upsert(row);
+    if (error) {
+      console.warn('Supabase product upsert response:', error.message);
+    }
+  } catch (err) {
+    console.warn('Supabase product upsert exception:', err);
+  }
 }
 
 /**
  * Delete a product
  */
 export async function deleteProduct(productId: string): Promise<void> {
+  const current = getLocalStoredProducts();
+  saveLocalStoredProducts(current.filter((p) => p.id !== productId));
+
   try {
     await supabase.from('products').delete().eq('id', productId);
   } catch {
     // ignore
   }
-
-  const current = getLocalStoredProducts();
-  saveLocalStoredProducts(current.filter((p) => p.id !== productId));
 }
 
 /**

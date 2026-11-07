@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, KeyRound } from 'lucide-react';
 import { loginAdmin, AdminUser } from '../services/authService';
 
 interface AdminLoginProps {
@@ -22,15 +22,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onExit }
       const user = await loginAdmin(email.trim(), password);
       onLoginSuccess(user);
     } catch (err: any) {
-      setError(err?.message || 'Login failed. Please check your credentials.');
+      setError(err?.message || 'Login failed. Please check your Supabase Auth credentials.');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const fillDemoAdmin = () => {
-    setEmail('admin@sparta.com');
-    setPassword('sparta2026');
   };
 
   return (
@@ -54,7 +49,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onExit }
             Administrative Portal
           </h1>
           <p className="text-xs text-stone-400 mt-1">
-            Access inventory, dispatch Pathao courier parcels, and manage orders.
+            Sign in with your registered Supabase administrator account.
           </p>
         </div>
 
@@ -67,7 +62,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onExit }
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-[11px] uppercase tracking-wider text-stone-400 mb-1.5 font-medium">
-              Admin Email
+              Administrator Email
             </label>
             <div className="relative">
               <input
@@ -75,7 +70,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onExit }
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@sparta.com"
+                placeholder="your-admin@sparta.com"
                 className="w-full pl-10 pr-4 py-2.5 bg-black/40 border border-white/15 focus:border-stone-300 text-sm text-white rounded-none outline-none transition-colors"
               />
               <Mail className="w-4 h-4 text-stone-500 absolute left-3.5 top-3" />
@@ -109,17 +104,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onExit }
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-white/10 text-center">
-          <p className="text-[11px] text-stone-400">
-            Initial setup credentials:{' '}
-            <button
-              type="button"
-              onClick={fillDemoAdmin}
-              className="text-stone-200 underline hover:text-white cursor-pointer font-mono"
-            >
-              admin@sparta.com / sparta2026
-            </button>
-          </p>
+        <div className="mt-8 pt-6 border-t border-white/10 flex items-center gap-2 text-stone-400 text-[11px]">
+          <KeyRound className="w-3.5 h-3.5 shrink-0 text-stone-500" />
+          <span>Protected with Supabase Authentication &amp; RLS authorization policies.</span>
         </div>
       </div>
     </div>

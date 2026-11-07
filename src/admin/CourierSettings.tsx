@@ -175,20 +175,23 @@ export const CourierSettings: React.FC = () => {
 
             <div>
               <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
-                Account Username / Email
+                Merchant Username / Email *
               </label>
               <input
                 type="text"
                 value={creds.username}
                 onChange={(e) => setCreds({ ...creds, username: e.target.value })}
-                placeholder="merchant@pathao.com"
-                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none"
+                placeholder="merchant-email@sparta.com"
+                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
               />
+              <span className="text-[10px] text-stone-400 mt-1 block">
+                The registered login email from your merchant.pathao.com account.
+              </span>
             </div>
 
             <div>
               <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
-                Account Password
+                Merchant Account Password *
               </label>
               <div className="relative">
                 <input
@@ -206,6 +209,46 @@ export const CourierSettings: React.FC = () => {
                   {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
+              <span className="text-[10px] text-stone-400 mt-1 block">
+                Required by Pathao OAuth2 Password Grant to bind token to your merchant ID.
+              </span>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                Pathao Webhook Secret (Optional / Recommended)
+              </label>
+              <input
+                type="text"
+                value={creds.webhookSecret || ''}
+                onChange={(e) => setCreds({ ...creds, webhookSecret: e.target.value })}
+                placeholder="Webhook verification secret token"
+                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+              />
+              <span className="text-[10px] text-stone-400 mt-1 block">
+                Secures incoming parcel status webhooks (Delivered, In-Transit, Returned) from Pathao.
+              </span>
+            </div>
+
+            <div className="sm:col-span-2 p-3 bg-stone-50 dark:bg-black/40 border border-stone-200 dark:border-white/10 rounded">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-stone-500">
+                  Your Webhook Callback URL
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText('https://xqzzeisabqsqblogbvhb.supabase.co/functions/v1/pathao-webhook');
+                    alert('Webhook URL copied to clipboard!');
+                  }}
+                  className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                >
+                  Copy URL
+                </button>
+              </div>
+              <code className="text-[11px] font-mono text-stone-700 dark:text-stone-300 select-all block break-all">
+                https://xqzzeisabqsqblogbvhb.supabase.co/functions/v1/pathao-webhook
+              </code>
             </div>
           </div>
 
