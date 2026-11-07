@@ -8,7 +8,7 @@ export type Category =
 
 export type StockStatus = 'in-stock' | 'out-of-stock' | 'coming-soon';
 
-export type RouteView = 'home' | 'product' | 'checkout' | 'order-confirmed';
+export type RouteView = 'home' | 'product' | 'checkout' | 'order-confirmed' | 'admin' | 'admin-login';
 
 export type ThemeMode = 'light' | 'dark';
 

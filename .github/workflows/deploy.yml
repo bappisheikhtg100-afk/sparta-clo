@@ -31,7 +31,9 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: |
+          if [ ! -f package-lock.json ]; then npm i --package-lock-only --legacy-peer-deps; fi
+          npm install --legacy-peer-deps
 
       - name: Build with GitHub Pages base path
         run: npm run build

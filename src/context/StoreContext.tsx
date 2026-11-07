@@ -9,7 +9,9 @@ import {
   ThemeMode,
   ToastMessage,
 } from '../types/store';
-import { formatBDT, STORE_INFO } from '../data/storeData';
+import { formatBDT, STORE_INFO, PRODUCTS as STATIC_PRODUCTS } from '../data/storeData';
+import { fetchPublishedProducts } from '../services/productService';
+import { createOrderRecord } from '../services/orderService';
 
 interface StoreContextValue {
   theme: ThemeMode;
@@ -20,6 +22,8 @@ interface StoreContextValue {
   setActiveCategory: (cat: Category) => void;
   navigate: (route: RouteView, product?: Product | null) => void;
   jumpToCategory: (cat: Category) => void;
+  products: Product[];
+  refreshProducts: () => Promise<void>;
   cart: CartItem[];
   cartCount: number;
   cartSubtotal: number;
@@ -82,12 +86,45 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return null;
   });
 
-  const [currentRoute, setCurrentRoute] = useState<RouteView>('home');
+  const [products, setProducts] = useState<Product[]>(STATIC_PRODUCTS);
+  const [currentRoute, setCurrentRoute] = useState<RouteView>(() => {
+    if (typeof window !== 'undefined' && window.location.hash === '#admin') {
+      return 'admin';
+    }
+    return 'home';
+  });
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const refreshProducts = useCallback(async () => {
+    try {
+      const live = await fetchPublishedProducts();
+      if (live && live.length > 0) {
+        setProducts(live);
+      }
+    } catch {
+      // keep existing
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshProducts();
+  }, [refreshProducts]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash === '#admin') {
+        setCurrentRoute('admin');
+      } else if (window.location.hash === '#home' || window.location.hash === '') {
+        setCurrentRoute((prev) => (prev === 'admin' ? 'home' : prev));
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -302,6 +339,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // ignore
       }
 
+      // Persist to Supabase backend and local admin database asynchronously
+      createOrderRecord(receipt, shipping).catch((err) => {
+        console.warn('Could not sync order to Supabase:', err);
+      });
+
       setLastOrder(receipt);
       setCart([]);
       setCurrentRoute('order-confirmed');
@@ -322,6 +364,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setActiveCategory,
       navigate,
       jumpToCategory,
+      products,
+      refreshProducts,
       cart,
       cartCount,
       cartSubtotal,
@@ -347,6 +391,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       activeCategory,
       navigate,
       jumpToCategory,
+      products,
+      refreshProducts,
       cart,
       cartCount,
       cartSubtotal,

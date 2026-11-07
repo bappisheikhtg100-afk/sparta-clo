@@ -138,6 +138,14 @@ export const Footer: React.FC = () => {
             >
               {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
             </button>
+            <span aria-hidden="true">·</span>
+            <button
+              type="button"
+              onClick={() => navigate('admin')}
+              className="underline underline-offset-4 hover:text-[#111111] dark:hover:text-white transition-colors cursor-pointer"
+            >
+              Atelier Portal
+            </button>
           </div>
         </div>
       </div>

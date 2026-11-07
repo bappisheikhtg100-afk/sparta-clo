@@ -8,14 +8,14 @@ import { ProductCard } from './ProductCard';
 type SortOption = 'featured' | 'price-asc' | 'price-desc';
 
 export const CollectionSection: React.FC = () => {
-  const { activeCategory, setActiveCategory } = useStore();
+  const { activeCategory, setActiveCategory, products } = useStore();
   const [sortBy, setSortBy] = useState<SortOption>('featured');
   const [inStockOnly, setInStockOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
   const filteredProducts = useMemo(() => {
-    let list = PRODUCTS;
+    let list = products && products.length > 0 ? products : PRODUCTS;
 
     if (activeCategory !== 'All') {
       list = list.filter((p) => p.category === activeCategory);

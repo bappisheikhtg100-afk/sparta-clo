@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { MessageCircle } from 'lucide-react';
 import { StoreProvider, useStore } from './context/StoreContext';
@@ -19,9 +19,55 @@ import { OrderConfirmedView } from './components/OrderConfirmedView';
 import { Footer } from './components/Footer';
 import { ToastContainer } from './components/ToastContainer';
 import { STORE_INFO } from './data/storeData';
+import { AdminLayout } from './admin/AdminLayout';
+import { AdminLogin } from './admin/AdminLogin';
+import { AdminUser, getCurrentAdmin, logoutAdmin } from './services/authService';
 
 const StoreShell: React.FC = () => {
-  const { currentRoute } = useStore();
+  const { currentRoute, navigate } = useStore();
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    getCurrentAdmin()
+      .then((user) => setAdminUser(user))
+      .catch(() => setAdminUser(null))
+      .finally(() => setIsCheckingAuth(false));
+  }, []);
+
+  const handleLogout = async () => {
+    await logoutAdmin();
+    setAdminUser(null);
+    navigate('home');
+  };
+
+  // If in admin route
+  if (currentRoute === 'admin') {
+    if (isCheckingAuth) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[#09090C] text-stone-400 font-mono text-xs">
+          Authenticating SPARTA Portal...
+        </div>
+      );
+    }
+
+    if (!adminUser) {
+      return (
+        <AdminLogin
+          onLoginSuccess={(user) => setAdminUser(user)}
+          onExit={() => navigate('home')}
+        />
+      );
+    }
+
+    return (
+      <AdminLayout
+        adminUser={adminUser}
+        onLogout={handleLogout}
+        onExitToStore={() => navigate('home')}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#111111] dark:bg-[#08080A] dark:text-[#F5F4F0] transition-colors duration-200">
