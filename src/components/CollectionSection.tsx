@@ -17,7 +17,9 @@ export const CollectionSection: React.FC = () => {
   const filteredProducts = useMemo(() => {
     let list = products && products.length > 0 ? products : PRODUCTS;
 
-    if (activeCategory !== 'All') {
+    if (activeCategory === 'All' && !searchQuery.trim()) {
+      list = list.filter((p) => p.featuredOnHome !== false);
+    } else if (activeCategory !== 'All') {
       list = list.filter((p) => p.category === activeCategory);
     }
 

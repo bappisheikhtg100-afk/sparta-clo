@@ -34,7 +34,12 @@ export const ProductDetailView: React.FC = () => {
     setValidationMsg(null);
     setSelectedColor(selectedProduct.colors?.[0]?.name);
     if (selectedProduct.sizes.length === 1) {
-      setSelectedSize(selectedProduct.sizes[0]);
+      const singleSize = selectedProduct.sizes[0];
+      setSelectedSize(singleSize);
+      if (selectedProduct.sizeImages?.[singleSize]) {
+        const foundIdx = selectedProduct.images.indexOf(selectedProduct.sizeImages[singleSize]);
+        if (foundIdx !== -1) setActiveImage(foundIdx);
+      }
     } else {
       setSelectedSize('');
     }
@@ -337,6 +342,13 @@ export const ProductDetailView: React.FC = () => {
                       onClick={() => {
                         setSelectedSize(size);
                         setValidationMsg(null);
+                        if (selectedProduct.sizeImages?.[size]) {
+                          const targetUrl = selectedProduct.sizeImages[size];
+                          const foundIdx = selectedProduct.images.indexOf(targetUrl);
+                          if (foundIdx !== -1) {
+                            setActiveImage(foundIdx);
+                          }
+                        }
                       }}
                       className={`min-h-[48px] px-3 py-2 border text-xs font-medium flex flex-col items-center justify-center transition-colors cursor-pointer ${
                         isSelected

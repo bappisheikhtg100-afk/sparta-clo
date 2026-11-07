@@ -8,7 +8,13 @@ export type Category =
 
 export type StockStatus = 'in-stock' | 'out-of-stock' | 'coming-soon';
 
-export type RouteView = 'home' | 'product' | 'checkout' | 'order-confirmed' | 'admin' | 'admin-login';
+export type RouteView =
+  | 'home'
+  | 'product'
+  | 'checkout'
+  | 'order-confirmed'
+  | 'admin'
+  | 'admin-login';
 
 export type ThemeMode = 'light' | 'dark';
 
@@ -37,6 +43,8 @@ export interface Product {
   stockCount?: number;
   imageFit?: 'cover-top' | 'cover-center' | 'contain';
   canvasBg?: string;
+  featuredOnHome?: boolean; // Control whether product appears in curated homepage section
+  sizeImages?: Record<string, string>; // Optional variant-specific image mapping for different sizes/volumes
 }
 
 export interface CartItem {
@@ -70,6 +78,8 @@ export interface OrderReceipt {
   customer: ShippingDetails;
   items: CartItem[];
   subtotal: number;
+  discountAmount?: number;
+  couponCode?: string;
   deliveryFee: number;
   total: number;
   paymentMethod: 'Cash on Delivery';
@@ -81,4 +91,29 @@ export interface ToastMessage {
   id: string;
   title: string;
   subtitle?: string;
+}
+
+export interface Coupon {
+  id: string;
+  code: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  minOrderAmount: number;
+  isActive: boolean;
+  description?: string;
+}
+
+export interface StoreSettings {
+  announcementText: string;
+  isAnnouncementActive: boolean;
+  facebookUrl: string;
+  instagramUrl: string;
+  tiktokUrl: string;
+  whatsappNumber: string;
+  isFreeDeliveryActive: boolean; // Master toggle to turn off delivery charges
+  insideDhakaFee: number;
+  outsideDhakaFee: number;
+  freeShippingThreshold: number;
+  spendSaveThreshold: number; // e.g. ৳3000
+  spendSaveDiscount: number; // e.g. ৳300 off
 }

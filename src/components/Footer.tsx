@@ -1,9 +1,10 @@
 import React from 'react';
 import { MEDIA_ASSETS, STORE_INFO } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
+import { FacebookIcon, InstagramIcon, TikTokIcon, WhatsAppIcon } from './SocialIcons';
 
 export const Footer: React.FC = () => {
-  const { theme, jumpToCategory, navigate, toggleTheme } = useStore();
+  const { theme, jumpToCategory, navigate, toggleTheme, storeSettings } = useStore();
 
   return (
     <footer className="border-t border-stone-200 dark:border-zinc-800 bg-[#FAF9F6] dark:bg-[#08080A] transition-colors duration-200">
@@ -104,22 +105,50 @@ export const Footer: React.FC = () => {
                   {STORE_INFO.email}
                 </a>
               </p>
-              <div className="pt-2 flex items-center gap-6 text-sm font-medium text-[#111111] dark:text-zinc-200">
+              <div className="pt-3 flex items-center gap-3">
+                {storeSettings.facebookUrl && (
+                  <a
+                    href={storeSettings.facebookUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Follow SPARTA on Facebook"
+                    className="p-2.5 rounded-full bg-stone-100 dark:bg-white/5 hover:bg-stone-200 dark:hover:bg-white/10 text-[#111111] dark:text-zinc-200 transition-colors"
+                  >
+                    <FacebookIcon className="w-4 h-4" />
+                  </a>
+                )}
+                {storeSettings.instagramUrl && (
+                  <a
+                    href={storeSettings.instagramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Follow SPARTA on Instagram"
+                    className="p-2.5 rounded-full bg-stone-100 dark:bg-white/5 hover:bg-stone-200 dark:hover:bg-white/10 text-[#111111] dark:text-zinc-200 transition-colors"
+                  >
+                    <InstagramIcon className="w-4 h-4" />
+                  </a>
+                )}
+                {storeSettings.tiktokUrl && (
+                  <a
+                    href={storeSettings.tiktokUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Follow SPARTA on TikTok"
+                    className="p-2.5 rounded-full bg-stone-100 dark:bg-white/5 hover:bg-stone-200 dark:hover:bg-white/10 text-[#111111] dark:text-zinc-200 transition-colors"
+                  >
+                    <TikTokIcon className="w-4 h-4" />
+                  </a>
+                )}
                 <a
-                  href={STORE_INFO.socials.instagram}
+                  href={`https://wa.me/${storeSettings.whatsappNumber || '8801610046310'}?text=${encodeURIComponent(
+                    'Hello SPARTA!'
+                  )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="min-h-[40px] inline-flex items-center hover:opacity-65 transition-opacity"
+                  aria-label="Chat with SPARTA on WhatsApp"
+                  className="p-2.5 rounded-full bg-stone-100 dark:bg-white/5 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-[#111111] dark:text-zinc-200 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
                 >
-                  Instagram ↗
-                </a>
-                <a
-                  href={STORE_INFO.socials.tiktok}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="min-h-[40px] inline-flex items-center hover:opacity-65 transition-opacity"
-                >
-                  TikTok ↗
+                  <WhatsAppIcon className="w-4 h-4" />
                 </a>
               </div>
             </div>

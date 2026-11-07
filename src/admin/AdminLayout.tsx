@@ -12,6 +12,7 @@ import {
   Sun,
   Moon,
   ShieldCheck,
+  Tag,
 } from 'lucide-react';
 import { AdminUser, logoutAdmin } from '../services/authService';
 import { AdminOrder, fetchAllOrders } from '../services/orderService';
@@ -22,6 +23,7 @@ import { ProductManagement } from './ProductManagement';
 import { OrderManagement } from './OrderManagement';
 import { CustomerManagement } from './CustomerManagement';
 import { CourierSettings } from './CourierSettings';
+import { OffersManagement } from './OffersManagement';
 import { ShippingLabelModal } from './ShippingLabelModal';
 import { useStore } from '../context/StoreContext';
 
@@ -31,7 +33,7 @@ interface AdminLayoutProps {
   onExitToStore: () => void;
 }
 
-export type AdminTab = 'overview' | 'orders' | 'products' | 'customers' | 'courier';
+export type AdminTab = 'overview' | 'orders' | 'products' | 'offers' | 'customers' | 'courier';
 
 export const AdminLayout: React.FC<AdminLayoutProps> = ({
   adminUser,
@@ -71,8 +73,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'orders', label: 'Orders & Dispatch', icon: Package, badge: orders.filter((o) => o.status === 'pending').length },
     { id: 'products', label: 'Inventory Catalogue', icon: ShoppingBag },
+    { id: 'offers', label: 'Offers & Promos', icon: Tag },
     { id: 'customers', label: 'Client Directory', icon: Users },
-    { id: 'courier', label: 'Pathao & Settings', icon: Truck },
+    { id: 'courier', label: 'Settings & Integrations', icon: Truck },
   ];
 
   return (
@@ -282,6 +285,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               onCloseCreateModal={() => setIsCreateProductModalOpen(false)}
             />
           )}
+
+          {currentTab === 'offers' && <OffersManagement />}
 
           {currentTab === 'customers' && <CustomerManagement orders={orders} />}
 

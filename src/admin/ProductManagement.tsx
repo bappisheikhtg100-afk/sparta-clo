@@ -11,6 +11,8 @@ import {
   X,
   Image as ImageIcon,
   Loader2,
+  Star,
+  Info,
 } from 'lucide-react';
 import { Product, Category, StockStatus } from '../types/store';
 import { uploadToCloudinary } from '../services/cloudinaryService';
@@ -31,7 +33,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   isCreateModalOpen: initialModalOpen = false,
   onCloseCreateModal,
 }) => {
-  const { refreshProducts } = useStore();
+  const { refreshProducts, pushToast } = useStore();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -47,8 +49,10 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   const [formSizes, setFormSizes] = useState('S, M, L, XL');
   const [formStock, setFormStock] = useState<StockStatus>('in-stock');
   const [formStockCount, setFormStockCount] = useState('15');
+  const [formFeaturedOnHome, setFormFeaturedOnHome] = useState(true);
   const [formImages, setFormImages] = useState<string[]>([]);
   const [formHoverIndex, setFormHoverIndex] = useState(1);
+  const [formSizeImages, setFormSizeImages] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -64,8 +68,10 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setFormSizes('S, M, L, XL');
     setFormStock('in-stock');
     setFormStockCount('20');
+    setFormFeaturedOnHome(true);
     setFormImages([]);
     setFormHoverIndex(1);
+    setFormSizeImages({});
     setUploadError(null);
     setIsModalOpen(true);
   };
@@ -81,8 +87,10 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setFormSizes((p.sizes || []).join(', '));
     setFormStock(p.stock);
     setFormStockCount(p.stockCount !== undefined ? p.stockCount.toString() : '10');
+    setFormFeaturedOnHome(p.featuredOnHome ?? true);
     setFormImages(p.images || []);
     setFormHoverIndex(p.hoverImageIndex ?? 1);
+    setFormSizeImages(p.sizeImages || {});
     setUploadError(null);
     setIsModalOpen(true);
   };
@@ -116,6 +124,19 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     }
   };
 
+  const handleToggleHomeFeatured = async (product: Product, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const nextVal = !product.featuredOnHome;
+    const updated: Product = { ...product, featuredOnHome: nextVal };
+    await upsertProduct(updated, true);
+    await refreshProducts();
+    onRefresh();
+    pushToast(
+      nextVal ? 'Featured on Home' : 'Removed from Home',
+      `${product.name} ${nextVal ? 'will appear' : 'hidden from'} curated collection`
+    );
+  };
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
@@ -125,6 +146,11 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
       const productId =
         editingProduct?.id ||
         `prod-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+      const parsedSizes = formSizes
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
 
       const productPayload: Product = {
         id: productId,
@@ -137,16 +163,18 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
           .split('\n')
           .map((d) => d.trim())
           .filter(Boolean),
-        sizes: formSizes
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        sizes: parsedSizes,
         stock: formStock,
         stockCount: formStockCount ? Number(formStockCount) : 10,
-        images: formImages.length > 0 ? formImages : ['https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&q=80&w=1000'],
+        featuredOnHome: formFeaturedOnHome,
+        images:
+          formImages.length > 0
+            ? formImages
+            : ['https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&q=80&w=1000'],
         hoverImageIndex: formHoverIndex,
         hoverFit: 'cover-top',
         imageFit: 'cover-top',
+        sizeImages: Object.keys(formSizeImages).length > 0 ? formSizeImages : undefined,
       };
 
       await upsertProduct(productPayload, true);
@@ -154,6 +182,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
       setIsModalOpen(false);
       if (onCloseCreateModal) onCloseCreateModal();
       onRefresh();
+      pushToast('Product Saved', `${productPayload.name} updated successfully`);
     } catch (err: any) {
       setUploadError(err?.message || 'Failed to save product');
     } finally {
@@ -166,6 +195,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
       await deleteProduct(productId);
       await refreshProducts();
       onRefresh();
+      pushToast('Product Deleted');
     }
   };
 
@@ -183,6 +213,11 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     return matchesSearch && matchesCat;
   });
 
+  const parsedFormSizes = formSizes
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   return (
     <div className="space-y-6">
       {/* Header & Controls */}
@@ -192,7 +227,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
             Product Archive &amp; Stock
           </h2>
           <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-            Manage inventory catalogue, Cloudinary editorial images, and pricing.
+            Manage inventory catalogue, featured homepage pieces, Cloudinary editorial images, and pricing.
           </p>
         </div>
         <button
@@ -243,6 +278,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                 <th className="py-3 px-4">Price</th>
                 <th className="py-3 px-4">Stock Status</th>
                 <th className="py-3 px-4">Units</th>
+                <th className="py-3 px-4 text-center">Home Featured</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -250,6 +286,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
             <tbody className="divide-y divide-stone-100 dark:divide-white/5">
               {filteredProducts.map((product) => {
                 const isPublished = product.is_published ?? true;
+                const isFeatured = product.featuredOnHome ?? true;
                 return (
                   <tr key={product.id} className="hover:bg-stone-50 dark:hover:bg-white/[0.02] transition-colors">
                     <td className="py-3 px-4">
@@ -298,6 +335,21 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                     </td>
                     <td className="py-3 px-4 font-mono text-stone-700 dark:text-stone-300">
                       {product.stockCount ?? '15'}
+                    </td>
+                    {/* Home Featured Quick Toggle */}
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleHomeFeatured(product, e)}
+                        className={`p-1.5 rounded transition-colors cursor-pointer ${
+                          isFeatured
+                            ? 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100'
+                            : 'text-stone-300 hover:text-stone-500 hover:bg-stone-100 dark:hover:bg-white/5'
+                        }`}
+                        title={isFeatured ? 'Featured on Home (Click to unfeature)' : 'Click to feature on Homepage'}
+                      >
+                        <Star className={`w-4 h-4 ${isFeatured ? 'fill-amber-500' : ''}`} />
+                      </button>
                     </td>
                     <td className="py-3 px-4">
                       <button
@@ -367,6 +419,27 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                   {uploadError}
                 </div>
               )}
+
+              {/* Home Page Featured Switch */}
+              <div className="p-3 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Star className={`w-4 h-4 ${formFeaturedOnHome ? 'text-amber-500 fill-amber-500' : 'text-stone-400'}`} />
+                  <div>
+                    <span className="font-semibold text-stone-900 dark:text-white text-xs">
+                      Feature on Home Page Collection
+                    </span>
+                    <p className="text-[11px] text-stone-500">
+                      When enabled, this piece appears in the primary curated archive on the homepage.
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formFeaturedOnHome}
+                  onChange={(e) => setFormFeaturedOnHome(e.target.checked)}
+                  className="rounded border-stone-300 w-4 h-4 text-amber-600 focus:ring-0 cursor-pointer"
+                />
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -458,13 +531,13 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
 
               <div>
                 <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
-                  Available Sizes (comma-separated)
+                  Available Sizes / Volumes (comma-separated)
                 </label>
                 <input
                   type="text"
                   value={formSizes}
                   onChange={(e) => setFormSizes(e.target.value)}
-                  placeholder="S, M, L, XL, XXL"
+                  placeholder="S, M, L, XL, XXL (or 15 ml, 50 ml, 100 ml)"
                   className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none"
                 />
               </div>
@@ -495,8 +568,21 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                 />
               </div>
 
-              {/* Cloudinary Image Upload Section */}
-              <div className="pt-2 border-t border-stone-200 dark:border-white/10">
+              {/* Cloudinary Image Upload Section with Dimension Guidance */}
+              <div className="pt-2 border-t border-stone-200 dark:border-white/10 space-y-3">
+                {/* Image Dimension Guidelines Banner */}
+                <div className="p-3 bg-stone-50 dark:bg-white/[0.03] border border-stone-200 dark:border-white/10 rounded flex items-start gap-2.5 text-[11px]">
+                  <Info className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="text-stone-600 dark:text-stone-300">
+                    <strong className="text-stone-900 dark:text-white font-medium">Recommended Image Dimensions:</strong>
+                    <div className="mt-0.5 space-y-0.5">
+                      <p>• <strong>Apparel &amp; Model Editorial:</strong> <span className="font-mono text-stone-900 dark:text-white font-semibold">1200 × 1600 px</span> (3:4 Portrait aspect ratio)</p>
+                      <p>• <strong>Footwear, Fragrances &amp; Caps:</strong> <span className="font-mono text-stone-900 dark:text-white font-semibold">1200 × 1200 px</span> (1:1 Square aspect ratio)</p>
+                      <p className="text-stone-400">• Maximum file size: 5 MB · Format: JPG / WebP with neutral studio backdrop</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between mb-2">
                   <label className="block uppercase tracking-wider text-stone-500 font-medium">
                     Editorial Images ({formImages.length})
@@ -555,6 +641,44 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Optional Size-Specific Image Mapping */}
+                {parsedFormSizes.length > 0 && formImages.length > 0 && (
+                  <div className="pt-3 border-t border-stone-100 dark:border-white/5 space-y-2">
+                    <span className="block uppercase tracking-wider text-stone-500 font-medium text-[11px]">
+                      Variant / Size-Specific Image Mapping (Optional)
+                    </span>
+                    <p className="text-[10px] text-stone-400">
+                      Link a specific photo to display automatically when a customer picks this size or volume.
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {parsedFormSizes.map((size) => (
+                        <div key={size} className="p-2 border border-stone-200 dark:border-white/10 rounded">
+                          <div className="font-semibold text-stone-900 dark:text-white text-[11px] mb-1">
+                            Size: {size}
+                          </div>
+                          <select
+                            value={formSizeImages[size] || ''}
+                            onChange={(e) =>
+                              setFormSizeImages({
+                                ...formSizeImages,
+                                [size]: e.target.value,
+                              })
+                            }
+                            className="w-full text-[10px] bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 rounded p-1 outline-none"
+                          >
+                            <option value="">Default Product Photo</option>
+                            {formImages.map((img, i) => (
+                              <option key={i} value={img}>
+                                Photo #{i + 1}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

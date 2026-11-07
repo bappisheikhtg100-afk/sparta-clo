@@ -11,6 +11,8 @@ import {
   Eye,
   EyeOff,
   Cloud,
+  Megaphone,
+  Share2,
 } from 'lucide-react';
 import {
   getStoredPathaoCredentials,
@@ -19,13 +21,24 @@ import {
   fetchPathaoStores,
   PathaoCredentials,
   PathaoStore,
+  PATHAO_SANDBOX_DEFAULTS,
 } from '../services/pathaoService';
 import { CLOUDINARY_CONFIG } from '../services/cloudinaryService';
+import { useStore } from '../context/StoreContext';
 
 export const CourierSettings: React.FC = () => {
+  const { storeSettings, updateSettings } = useStore();
   const [creds, setCreds] = useState<PathaoCredentials>(getStoredPathaoCredentials());
   const [showSecret, setShowSecret] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Announcement & Social Links
+  const [announcementText, setAnnouncementText] = useState(storeSettings.announcementText);
+  const [isAnnouncementActive, setIsAnnouncementActive] = useState(storeSettings.isAnnouncementActive);
+  const [facebookUrl, setFacebookUrl] = useState(storeSettings.facebookUrl);
+  const [instagramUrl, setInstagramUrl] = useState(storeSettings.instagramUrl);
+  const [tiktokUrl, setTiktokUrl] = useState(storeSettings.tiktokUrl);
+  const [whatsappNumber, setWhatsappNumber] = useState(storeSettings.whatsappNumber);
 
   // Testing & Store states
   const [isTesting, setIsTesting] = useState(false);
@@ -35,13 +48,37 @@ export const CourierSettings: React.FC = () => {
   const [isSaved, setIsSaved] = useState(false);
 
   // Delivery fee rules
-  const [insideDhakaFee, setInsideDhakaFee] = useState('70');
-  const [outsideDhakaFee, setOutsideDhakaFee] = useState('130');
-  const [freeShippingThreshold, setFreeShippingThreshold] = useState('5000');
+  const [insideDhakaFee, setInsideDhakaFee] = useState(String(storeSettings.insideDhakaFee || 70));
+  const [outsideDhakaFee, setOutsideDhakaFee] = useState(String(storeSettings.outsideDhakaFee || 120));
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState(String(storeSettings.freeShippingThreshold || 5000));
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    setAnnouncementText(storeSettings.announcementText);
+    setIsAnnouncementActive(storeSettings.isAnnouncementActive);
+    setFacebookUrl(storeSettings.facebookUrl);
+    setInstagramUrl(storeSettings.instagramUrl);
+    setTiktokUrl(storeSettings.tiktokUrl);
+    setWhatsappNumber(storeSettings.whatsappNumber);
+    setInsideDhakaFee(String(storeSettings.insideDhakaFee || 70));
+    setOutsideDhakaFee(String(storeSettings.outsideDhakaFee || 120));
+    setFreeShippingThreshold(String(storeSettings.freeShippingThreshold || 5000));
+  }, [storeSettings]);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     savePathaoCredentials(creds);
+    await updateSettings({
+      ...storeSettings,
+      announcementText,
+      isAnnouncementActive,
+      facebookUrl,
+      instagramUrl,
+      tiktokUrl,
+      whatsappNumber,
+      insideDhakaFee: Number(insideDhakaFee) || 70,
+      outsideDhakaFee: Number(outsideDhakaFee) || 120,
+      freeShippingThreshold: Number(freeShippingThreshold) || 5000,
+    });
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2500);
   };
@@ -63,7 +100,7 @@ export const CourierSettings: React.FC = () => {
         const storeList = await fetchPathaoStores(creds);
         setStores(storeList);
         if (storeList.length > 0 && !creds.storeId) {
-          setCreds((prev) => ({ ...prev, storeId: storeList[0].store_id }));
+          setCreds((prev: PathaoCredentials) => ({ ...prev, storeId: storeList[0].store_id }));
         }
       } catch {
         // ignore stores error
@@ -109,15 +146,44 @@ export const CourierSettings: React.FC = () => {
               </div>
             </div>
 
-            <label className="flex items-center gap-2 cursor-pointer">
-              <span className="text-[11px] text-stone-500">Sandbox Mode</span>
-              <input
-                type="checkbox"
-                checked={creds.isSandbox}
-                onChange={(e) => setCreds({ ...creds, isSandbox: e.target.checked })}
-                className="rounded border-stone-300"
-              />
-            </label>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setCreds({ ...PATHAO_SANDBOX_DEFAULTS });
+                  setTestResult({
+                    success: true,
+                    message: 'Official Pathao Sandbox credentials loaded! Click "Test Pathao Credentials" to verify.',
+                  });
+                }}
+                className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-700 dark:text-stone-300 rounded text-[11px] font-medium transition-colors cursor-pointer"
+              >
+                Load Official Sandbox Preset
+              </button>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="text-[11px] text-stone-500 font-medium">Sandbox Mode</span>
+                <input
+                  type="checkbox"
+                  checked={creds.isSandbox}
+                  onChange={(e) => setCreds({ ...creds, isSandbox: e.target.checked })}
+                  className="rounded border-stone-300 cursor-pointer"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Auto-Address Notice */}
+          <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded text-[11px] text-blue-900 dark:text-blue-200 space-y-1">
+            <div className="font-semibold flex items-center gap-1.5">
+              <span>Pathao Merchant Auto-Address Feature Active</span>
+              <span className="px-1.5 py-0.2 bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-100 text-[10px] rounded">
+                Official NLP
+              </span>
+            </div>
+            <p className="text-blue-800 dark:text-blue-300">
+              According to official Pathao documentation, you don't need manual city or zone dropdowns. When dispatching, Pathao's automated address parsing engine populates recipient city, zone, and delivery hub directly from the customer's delivery address string.
+            </p>
           </div>
 
           {testResult && (
@@ -263,7 +329,7 @@ export const CourierSettings: React.FC = () => {
                 onChange={(e) => setCreds({ ...creds, storeId: Number(e.target.value) })}
                 className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none"
               >
-                {stores.map((s) => (
+                {stores.map((s: PathaoStore) => (
                   <option key={s.store_id} value={s.store_id}>
                     {s.store_name} — {s.store_address}
                   </option>
@@ -326,6 +392,125 @@ export const CourierSettings: React.FC = () => {
                 <CheckCircle className="w-3.5 h-3.5" />
                 Signed WebCrypto SHA-1
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Top Header Marquee Announcement Bar */}
+        <div className="p-6 bg-white dark:bg-[#121216] border border-stone-200 dark:border-white/10 rounded-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-white/5">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-amber-50 dark:bg-amber-950/40 text-amber-600 rounded">
+                <Megaphone className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-stone-900 dark:text-white">
+                  Header Top Announcement Bar (Right-to-Left Marquee)
+                </h3>
+                <p className="text-[11px] text-stone-500">
+                  Displays a smooth scrolling banner at the very top of the storefront above the navigation.
+                </p>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className="text-[11px] text-stone-500">Enable Ticker</span>
+              <input
+                type="checkbox"
+                checked={isAnnouncementActive}
+                onChange={(e) => setIsAnnouncementActive(e.target.checked)}
+                className="rounded border-stone-300"
+              />
+            </label>
+          </div>
+
+          <div>
+            <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+              Marquee Announcement Text
+            </label>
+            <input
+              type="text"
+              value={announcementText}
+              onChange={(e) => setAnnouncementText(e.target.value)}
+              placeholder="EID ARCHIVE 2026 IS LIVE · CASH ON DELIVERY NATIONWIDE · COMPLIMENTARY SHIPPING OVER ৳5,000"
+              className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono text-xs"
+            />
+            <span className="text-[10px] text-stone-400 mt-1 block">
+              Tip: Separate announcements with middle dots ( · ) or bullets for an elegant architectural look.
+            </span>
+          </div>
+        </div>
+
+        {/* Social Media Links & Concierge */}
+        <div className="p-6 bg-white dark:bg-[#121216] border border-stone-200 dark:border-white/10 rounded-sm space-y-4">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-stone-100 dark:border-white/5">
+            <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 rounded">
+              <Share2 className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-stone-900 dark:text-white">
+                Social Media &amp; WhatsApp Concierge Channels
+              </h3>
+              <p className="text-[11px] text-stone-500">
+                Connected brand profiles across Facebook, Instagram, TikTok, and WhatsApp floating concierge.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                WhatsApp Concierge Number (with Country Code)
+              </label>
+              <input
+                type="text"
+                value={whatsappNumber}
+                onChange={(e) => setWhatsappNumber(e.target.value)}
+                placeholder="8801XXXXXXXXX"
+                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+              />
+              <span className="text-[10px] text-stone-400 mt-1 block">
+                Customers clicking the floating WhatsApp button will chat directly with this number.
+              </span>
+            </div>
+
+            <div>
+              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                Facebook Page URL
+              </label>
+              <input
+                type="url"
+                value={facebookUrl}
+                onChange={(e) => setFacebookUrl(e.target.value)}
+                placeholder="https://facebook.com/sparta.clo"
+                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                Instagram Profile URL
+              </label>
+              <input
+                type="url"
+                value={instagramUrl}
+                onChange={(e) => setInstagramUrl(e.target.value)}
+                placeholder="https://instagram.com/sparta.clo"
+                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                TikTok Profile URL
+              </label>
+              <input
+                type="url"
+                value={tiktokUrl}
+                onChange={(e) => setTiktokUrl(e.target.value)}
+                placeholder="https://tiktok.com/@sparta_clo"
+                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+              />
             </div>
           </div>
         </div>

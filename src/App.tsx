@@ -5,9 +5,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { MessageCircle } from 'lucide-react';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { Navbar } from './components/Navbar';
+import { AnnouncementBar } from './components/AnnouncementBar';
 import { MobileMenuDrawer } from './components/MobileMenuDrawer';
 import { CartDrawer } from './components/CartDrawer';
 import { HeroSection } from './components/HeroSection';
@@ -18,13 +18,13 @@ import { CheckoutView } from './components/CheckoutView';
 import { OrderConfirmedView } from './components/OrderConfirmedView';
 import { Footer } from './components/Footer';
 import { ToastContainer } from './components/ToastContainer';
-import { STORE_INFO } from './data/storeData';
+import { WhatsAppIcon } from './components/SocialIcons';
 import { AdminLayout } from './admin/AdminLayout';
 import { AdminLogin } from './admin/AdminLogin';
 import { AdminUser, getCurrentAdmin, logoutAdmin } from './services/authService';
 
 const StoreShell: React.FC = () => {
-  const { currentRoute, navigate } = useStore();
+  const { currentRoute, navigate, storeSettings } = useStore();
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
@@ -71,6 +71,7 @@ const StoreShell: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#111111] dark:bg-[#08080A] dark:text-[#F5F4F0] transition-colors duration-200">
+      <AnnouncementBar />
       <Navbar />
       <MobileMenuDrawer />
       <CartDrawer />
@@ -132,21 +133,25 @@ const StoreShell: React.FC = () => {
 
       <Footer />
 
-      {/* Architectural WhatsApp Concierge Trigger on Home */}
-      {currentRoute === 'home' && (
-        <a
-          href={`https://wa.me/${STORE_INFO.whatsappNumber}?text=${encodeURIComponent(
-            'Hello SPARTA Support!'
-          )}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Chat with SPARTA on WhatsApp"
-          className="fixed bottom-5 right-5 z-30 min-h-[46px] min-w-[46px] px-4 bg-[#111111] text-[#FAF9F6] dark:bg-[#F5F4F0] dark:text-[#08080A] shadow-md border border-white/10 dark:border-black/10 inline-flex items-center justify-center gap-2 text-xs font-medium tracking-wide hover:opacity-90 active:scale-95 transition-all duration-150"
-        >
-          <MessageCircle className="w-4 h-4 shrink-0" strokeWidth={1.7} />
-          <span className="hidden sm:inline">Concierge</span>
-        </a>
-      )}
+      {/* Floating Official WhatsApp Concierge Button */}
+      <a
+        href={`https://wa.me/${storeSettings.whatsappNumber || '8801610046310'}?text=${encodeURIComponent(
+          'Hello SPARTA! I would like to inquire about an order.'
+        )}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Chat on WhatsApp"
+        className="fixed bottom-5 right-5 z-40 group flex items-center gap-2.5 px-4 py-3 bg-[#25D366] hover:bg-[#20ba5a] text-white rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 active:scale-95"
+      >
+        <div className="relative flex items-center justify-center">
+          <WhatsAppIcon className="w-5 h-5 text-white" />
+          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white rounded-full animate-ping opacity-75" />
+          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white rounded-full" />
+        </div>
+        <span className="text-xs font-semibold tracking-wide hidden sm:inline">
+          WhatsApp Concierge
+        </span>
+      </a>
     </div>
   );
 };

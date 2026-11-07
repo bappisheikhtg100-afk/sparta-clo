@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Minus, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Trash2, Tag, Check, X } from 'lucide-react';
 import { BANGLADESH_DIVISIONS, formatBDT, STORE_INFO } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
 import { DeliveryZone, ShippingDetails } from '../types/store';
@@ -9,11 +9,20 @@ export const CheckoutView: React.FC = () => {
   const {
     cart,
     cartSubtotal,
+    discountAmount,
+    spendSaveAmount,
+    appliedCoupon,
+    applyCoupon,
+    removeCoupon,
+    storeSettings,
     updateCartQuantity,
     removeFromCart,
     navigate,
     placeCODOrder,
   } = useStore();
+
+  const [couponInput, setCouponInput] = useState('');
+  const [couponFeedback, setCouponFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
   const [form, setForm] = useState<ShippingDetails>({
     fullName: '',
@@ -47,13 +56,28 @@ export const CheckoutView: React.FC = () => {
     );
   }
 
-  const isFreeShipping = cartSubtotal >= STORE_INFO.freeShippingThreshold;
+  const isFreeShipping =
+    storeSettings.isFreeDeliveryActive ||
+    cartSubtotal >= (storeSettings.freeShippingThreshold || STORE_INFO.freeShippingThreshold);
+
   const baseDeliveryFee =
     form.deliveryZone === 'inside-dhaka'
-      ? STORE_INFO.insideDhakaFee
-      : STORE_INFO.outsideDhakaFee;
+      ? (storeSettings.insideDhakaFee || STORE_INFO.insideDhakaFee)
+      : (storeSettings.outsideDhakaFee || STORE_INFO.outsideDhakaFee);
+
   const deliveryFee = isFreeShipping ? 0 : baseDeliveryFee;
-  const totalPayable = cartSubtotal + deliveryFee;
+  const totalDiscount = discountAmount + spendSaveAmount;
+  const totalPayable = Math.max(0, cartSubtotal - totalDiscount + deliveryFee);
+
+  const handleApplyCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!couponInput.trim()) return;
+    const res = applyCoupon(couponInput.trim());
+    setCouponFeedback(res);
+    if (res.success) {
+      setCouponInput('');
+    }
+  };
 
   const handleDivisionChange = (division: string) => {
     const autoZone: DeliveryZone =
@@ -414,19 +438,106 @@ export const CheckoutView: React.FC = () => {
             ))}
           </div>
 
+          {/* Coupon / Voucher Input Box */}
+          <div className="mt-6 pt-5 border-t border-stone-200 dark:border-zinc-800">
+            <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-zinc-400 font-medium mb-2.5">
+              Promo Voucher / Coupon
+            </span>
+
+            {appliedCoupon ? (
+              <div className="p-3 bg-stone-100 dark:bg-white/5 border border-stone-200 dark:border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Tag className="w-3.5 h-3.5 text-stone-700 dark:text-stone-300" />
+                  <div>
+                    <span className="font-mono text-xs font-semibold text-stone-900 dark:text-white">
+                      {appliedCoupon.code}
+                    </span>
+                    <span className="text-[10px] text-stone-500 block">
+                      {appliedCoupon.description || 'Active discount applied'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={removeCoupon}
+                  className="p-1 text-stone-400 hover:text-rose-500 cursor-pointer transition-colors"
+                  title="Remove coupon"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleApplyCoupon} className="flex gap-2">
+                <input
+                  type="text"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value)}
+                  placeholder="Enter coupon code (e.g. SPARTA10)"
+                  className="flex-1 px-3 py-2 bg-white dark:bg-black/30 border border-stone-300 dark:border-zinc-700 text-xs text-stone-900 dark:text-white uppercase font-mono tracking-wider outline-none focus:border-stone-800 dark:focus:border-white"
+                />
+                <button
+                  type="submit"
+                  disabled={!couponInput.trim()}
+                  className="px-4 py-2 bg-stone-900 hover:bg-black dark:bg-white dark:hover:bg-stone-200 text-white dark:text-black text-xs font-medium uppercase tracking-wider disabled:opacity-40 cursor-pointer transition-colors"
+                >
+                  Apply
+                </button>
+              </form>
+            )}
+
+            {couponFeedback && (
+              <p
+                className={`mt-2 text-[11px] ${
+                  couponFeedback.success
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-amber-600 dark:text-amber-400'
+                }`}
+              >
+                {couponFeedback.message}
+              </p>
+            )}
+          </div>
+
           <div className="mt-6 pt-5 border-t border-stone-200 dark:border-zinc-800 space-y-2.5 text-sm">
             <div className="flex items-center justify-between text-stone-600 dark:text-zinc-400">
               <span>Subtotal</span>
               <span className="font-mono tabular-nums">{formatBDT(cartSubtotal)}</span>
             </div>
+
+            {discountAmount > 0 && (
+              <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
+                <span className="flex items-center gap-1.5">
+                  <Tag className="w-3 h-3" />
+                  Promo Coupon ({appliedCoupon?.code})
+                </span>
+                <span className="font-mono tabular-nums font-medium">
+                  - {formatBDT(discountAmount)}
+                </span>
+              </div>
+            )}
+
+            {spendSaveAmount > 0 && (
+              <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
+                <span>Spend &amp; Save Campaign</span>
+                <span className="font-mono tabular-nums font-medium">
+                  - {formatBDT(spendSaveAmount)}
+                </span>
+              </div>
+            )}
+
             <div className="flex items-center justify-between text-stone-600 dark:text-zinc-400">
               <span>
                 Delivery ({form.deliveryZone === 'inside-dhaka' ? 'Inside Dhaka' : 'Outside Dhaka'})
               </span>
               <span className="font-mono tabular-nums">
-                {deliveryFee === 0 ? 'Complimentary' : formatBDT(deliveryFee)}
+                {deliveryFee === 0 ? (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">Complimentary</span>
+                ) : (
+                  formatBDT(deliveryFee)
+                )}
               </span>
             </div>
+
             <div className="flex items-center justify-between text-stone-600 dark:text-zinc-400">
               <span>Payment</span>
               <span>Cash on Delivery</span>

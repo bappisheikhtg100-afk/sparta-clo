@@ -16,7 +16,12 @@ import {
   Loader2,
 } from 'lucide-react';
 import { AdminOrder, updateOrderStatus } from '../services/orderService';
-import { createPathaoOrder, getStoredPathaoCredentials } from '../services/pathaoService';
+import {
+  createPathaoOrder,
+  getStoredPathaoCredentials,
+  trackPathaoOrder,
+  PathaoTrackingInfo,
+} from '../services/pathaoService';
 import { generateA4ShippingLabelsPDF, mapOrderToLabelData } from '../services/labelGenerator';
 import { formatBDT } from '../data/storeData';
 
@@ -97,6 +102,9 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     pdf.save(`SPARTA-Label-${order.orderNumber}.pdf`);
   };
 
+  const [isTracking, setIsTracking] = useState(false);
+  const [trackingInfo, setTrackingInfo] = useState<PathaoTrackingInfo | null>(null);
+
   const handleDispatchToPathao = async (order: AdminOrder) => {
     setIsDispatching(true);
     setDispatchError(null);
@@ -104,20 +112,19 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
 
     try {
       const creds = getStoredPathaoCredentials();
+      // Pathao Auto-Address Feature: We omit recipient_city & zone so Pathao NLP extracts them
       const result = await createPathaoOrder({
-        store_id: creds.storeId || 1,
+        store_id: creds.storeId,
         merchant_order_id: order.orderNumber,
         recipient_name: order.customerName,
         recipient_phone: order.customerPhone,
         recipient_address: order.shippingAddress,
-        recipient_city: order.deliveryZone === 'inside-dhaka' ? 1 : 2,
-        recipient_zone: 1,
         delivery_type: 48,
         item_type: 2, // parcel
-        item_quantity: order.items.reduce((acc, it) => acc + it.quantity, 0),
+        item_quantity: Math.max(1, order.items.reduce((acc, it) => acc + it.quantity, 0)),
         item_weight: 0.5,
         amount_to_collect: order.total,
-        item_description: order.items.map((it) => it.name).join(', '),
+        item_description: order.items.map((it) => it.name).join(', ') || 'SPARTA Garments',
       });
 
       await updateOrderStatus(order.id, {
@@ -127,7 +134,9 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
         courierStatus: result.order_status,
       });
 
-      setDispatchSuccess(`Dispatched to Pathao! Consignment ID: ${result.consignment_id}`);
+      setDispatchSuccess(
+        `Successfully dispatched to Pathao Courier! Consignment ID: ${result.consignment_id} (Fee: ৳${result.delivery_fee})`
+      );
       onRefresh();
       if (selectedOrder) {
         onSelectOrder({
@@ -141,6 +150,39 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
       setDispatchError(err?.message || 'Failed to dispatch to Pathao');
     } finally {
       setIsDispatching(false);
+    }
+  };
+
+  const handleTrackPathao = async (consignmentId: string) => {
+    setIsTracking(true);
+    try {
+      const track = await trackPathaoOrder(consignmentId);
+      setTrackingInfo(track);
+
+      // Auto update status if delivered
+      if (
+        track.order_status_slug === 'delivered' ||
+        track.order_status?.toLowerCase() === 'delivered'
+      ) {
+        if (selectedOrder) {
+          await updateOrderStatus(selectedOrder.id, {
+            status: 'delivered',
+            courierStatus: 'Delivered',
+            paymentStatus: 'paid',
+          });
+          onRefresh();
+          onSelectOrder({
+            ...selectedOrder,
+            status: 'delivered',
+            courierStatus: 'Delivered',
+            paymentStatus: 'paid',
+          });
+        }
+      }
+    } catch (err: any) {
+      alert(`Pathao tracking query failed: ${err.message}`);
+    } finally {
+      setIsTracking(false);
     }
   };
 
@@ -488,7 +530,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
                   Transfers order details directly to Pathao Courier system with automated COD parcel creation, weight calculation, and merchant reference.
                 </p>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={() => handleDispatchToPathao(selectedOrder)}
@@ -502,7 +544,38 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
                     )}
                     {selectedOrder.consignmentId ? 'Re-dispatch / Update Pathao' : 'Dispatch to Pathao Courier'}
                   </button>
+
+                  {selectedOrder.consignmentId && (
+                    <button
+                      type="button"
+                      onClick={() => handleTrackPathao(selectedOrder.consignmentId!)}
+                      disabled={isTracking}
+                      className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-800 dark:text-stone-200 font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-colors"
+                    >
+                      {isTracking ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Truck className="w-3.5 h-3.5" />
+                      )}
+                      Check Live Status
+                    </button>
+                  )}
                 </div>
+
+                {trackingInfo && (
+                  <div className="p-3 bg-white dark:bg-black/30 border border-blue-200 dark:border-blue-900/60 rounded text-[11px] space-y-1">
+                    <div className="flex items-center justify-between font-mono">
+                      <span className="text-stone-500">Live Status:</span>
+                      <span className="font-semibold text-blue-600 dark:text-blue-400 uppercase">
+                        {trackingInfo.order_status}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between font-mono text-[10px] text-stone-400">
+                      <span>Updated At:</span>
+                      <span>{new Date(trackingInfo.updated_at).toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

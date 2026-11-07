@@ -35,11 +35,18 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     const totalOrders = orders.length;
     const pendingOrders = orders.filter((o) => o.status === 'pending').length;
     const processingOrders = orders.filter((o) => o.status === 'processing').length;
+    const shippedOrders = orders.filter((o) => o.status === 'shipped').length;
     const deliveredOrders = orders.filter((o) => o.status === 'delivered').length;
     const cancelledOrders = orders.filter((o) => o.status === 'cancelled').length;
 
-    const totalRevenue = orders
-      .filter((o) => o.status !== 'cancelled')
+    // Realized Cash: strictly orders marked delivered or paid (received from Pathao)
+    const realizedRevenue = orders
+      .filter((o) => o.status === 'delivered' || o.paymentStatus === 'paid')
+      .reduce((acc, o) => acc + o.total, 0);
+
+    // In-Transit / Pipeline: orders pending, processing, or in delivery
+    const pipelineRevenue = orders
+      .filter((o) => o.status === 'pending' || o.status === 'processing' || o.status === 'shipped')
       .reduce((acc, o) => acc + o.total, 0);
 
     const lowStockProducts = products.filter(
@@ -50,9 +57,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       totalOrders,
       pendingOrders,
       processingOrders,
+      shippedOrders,
       deliveredOrders,
       cancelledOrders,
-      totalRevenue,
+      realizedRevenue,
+      pipelineRevenue,
       lowStockProducts,
     };
   }, [orders, products]);
@@ -93,17 +102,20 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Revenue */}
+        {/* Realized Revenue (Delivered & Paid Only) */}
         <div className="p-5 bg-white dark:bg-[#121216] border border-stone-200 dark:border-white/10 rounded-sm">
           <div className="flex items-center justify-between text-stone-500 dark:text-stone-400 mb-2">
-            <span className="text-[11px] font-medium uppercase tracking-wider">Gross Sales</span>
+            <span className="text-[11px] font-medium uppercase tracking-wider">Realized Cash (Delivered)</span>
             <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <div className="text-xl sm:text-2xl font-mono font-semibold text-stone-900 dark:text-white">
-            {formatBDT(stats.totalRevenue)}
+          <div className="text-xl sm:text-2xl font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+            {formatBDT(stats.realizedRevenue)}
           </div>
-          <div className="text-[11px] text-stone-500 dark:text-stone-400 mt-1">
-            {stats.totalOrders} total transactions
+          <div className="text-[11px] text-stone-500 dark:text-stone-400 mt-1 flex flex-col gap-0.5">
+            <span>{stats.deliveredOrders} orders completed &amp; collected</span>
+            <span className="text-[10px] text-stone-400 font-mono">
+              +{formatBDT(stats.pipelineRevenue)} in fulfillment pipeline
+            </span>
           </div>
         </div>
 
