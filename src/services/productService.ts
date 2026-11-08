@@ -1,13 +1,15 @@
 /**
  * Product Service for SPARTA E-Commerce
- * Synchronizes with Supabase database with seamless offline/fallback support
+ * Synchronizes with Supabase database with seamless local persistence fallback.
+ * Ensures edits, deletes, and featured toggles from the Admin Panel instantly
+ * reflect across the storefront and homepage.
  */
 
 import { supabase } from '../lib/supabase';
 import { Product, Category, StockStatus } from '../types/store';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/storeData';
 
-const LOCAL_PRODUCTS_KEY = 'sparta_local_products_v2';
+const LOCAL_PRODUCTS_KEY = 'sparta_local_products_v3';
 
 function mapDbRowToProduct(row: any): Product {
   return {
@@ -29,6 +31,8 @@ function mapDbRowToProduct(row: any): Product {
     stockCount: row.stock_count ?? undefined,
     imageFit: row.image_fit ?? undefined,
     canvasBg: row.canvas_bg ?? undefined,
+    featuredOnHome: row.featured_on_home !== false && row.featuredOnHome !== false,
+    sizeImages: row.size_images || row.sizeImages || undefined,
   };
 }
 
@@ -53,6 +57,8 @@ function mapProductToDbRow(product: Product, isPublished = true) {
     stock_count: product.stockCount ?? 15,
     image_fit: product.imageFit ?? 'cover-top',
     canvas_bg: product.canvasBg ?? '#F2F1EE',
+    featured_on_home: product.featuredOnHome !== false,
+    size_images: product.sizeImages || null,
     is_published: isPublished,
   };
 }
@@ -60,19 +66,24 @@ function mapProductToDbRow(product: Product, isPublished = true) {
 export function getLocalStoredProducts(): Product[] {
   try {
     const raw = localStorage.getItem(LOCAL_PRODUCTS_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch {
     // ignore
   }
+  // First time initialization: seed default products into localStorage
+  saveLocalStoredProducts(DEFAULT_PRODUCTS);
   return DEFAULT_PRODUCTS;
 }
 
 export function saveLocalStoredProducts(products: Product[]): void {
   try {
     localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(products));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sparta_products_updated', { detail: products }));
+    }
   } catch {
     // ignore
   }
@@ -95,7 +106,7 @@ export async function fetchPublishedProducts(): Promise<Product[]> {
       return live;
     }
   } catch {
-    // fallback gracefully
+    // fallback gracefully to local storage
   }
 
   return getLocalStoredProducts();
@@ -158,7 +169,8 @@ export async function upsertProduct(product: Product, isPublished = true): Promi
  */
 export async function deleteProduct(productId: string): Promise<void> {
   const current = getLocalStoredProducts();
-  saveLocalStoredProducts(current.filter((p) => p.id !== productId));
+  const updated = current.filter((p) => p.id !== productId);
+  saveLocalStoredProducts(updated);
 
   try {
     await supabase.from('products').delete().eq('id', productId);
@@ -171,6 +183,11 @@ export async function deleteProduct(productId: string): Promise<void> {
  * Toggle publish status
  */
 export async function toggleProductPublish(productId: string, isPublished: boolean): Promise<void> {
+  const current = getLocalStoredProducts();
+  saveLocalStoredProducts(
+    current.map((p) => (p.id === productId ? { ...p, is_published: isPublished } : p))
+  );
+
   try {
     await supabase.from('products').update({ is_published: isPublished }).eq('id', productId);
   } catch {

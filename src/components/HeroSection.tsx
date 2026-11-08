@@ -5,7 +5,7 @@ import { MEDIA_ASSETS, PRODUCTS } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
 
 export const HeroSection: React.FC = () => {
-  const { jumpToCategory, navigate, theme } = useStore();
+  const { jumpToCategory, navigate, theme, products } = useStore();
   const sectionRef = useRef<HTMLElement | null>(null);
   const mobileVideoRef = useRef<HTMLVideoElement | null>(null);
   const desktopVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -78,7 +78,7 @@ export const HeroSection: React.FC = () => {
     }
   };
 
-  const signaturePiece = PRODUCTS[0];
+  const signaturePiece = products && products.length > 0 ? products[0] : PRODUCTS[0];
 
   return (
     <section
@@ -177,9 +177,9 @@ export const HeroSection: React.FC = () => {
           >
             <img
               src={theme === 'dark' ? MEDIA_ASSETS.logoWhite : MEDIA_ASSETS.logoBlack}
-              alt=""
+              alt="SPARTA"
               referrerPolicy="no-referrer"
-              className="h-12 w-auto object-contain mb-7 opacity-90"
+              className="h-6 sm:h-7 w-auto object-contain mb-7 opacity-90"
             />
 
             <h1 className="font-display text-[clamp(3.25rem,4.8vw,4.75rem)] font-normal text-[#111111] dark:text-[#F5F4F0] leading-[1.02] tracking-[-0.01em] [text-wrap:balance] mb-6">

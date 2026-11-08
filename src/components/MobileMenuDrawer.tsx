@@ -39,16 +39,13 @@ export const MobileMenuDrawer: React.FC = () => {
           >
             <div>
               <div className="h-14 px-5 flex items-center justify-between border-b border-stone-200 dark:border-zinc-800">
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center">
                   <img
                     src={theme === 'dark' ? MEDIA_ASSETS.logoWhite : MEDIA_ASSETS.logoBlack}
-                    alt=""
+                    alt="SPARTA"
                     referrerPolicy="no-referrer"
-                    className="h-7 w-auto object-contain"
+                    className="h-4.5 w-auto object-contain"
                   />
-                  <span className="font-display text-lg font-semibold tracking-[0.24em] text-[#111111] dark:text-[#F5F4F0]">
-                    SPARTA
-                  </span>
                 </div>
                 <button
                   type="button"

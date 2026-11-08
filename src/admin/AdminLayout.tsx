@@ -85,12 +85,14 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
         {/* Brand Header */}
         <div className="p-6 border-b border-stone-200 dark:border-white/10 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono tracking-widest uppercase text-stone-400">
+            <div className="text-[10px] font-mono tracking-widest uppercase text-stone-400 mb-2">
               Operations Center
             </div>
-            <h1 className="font-display text-xl font-medium tracking-widest text-stone-900 dark:text-white">
-              SPARTA
-            </h1>
+            <img
+              src={theme === 'dark' ? '/assets/brand/logo-white.png' : '/assets/brand/logo-black.png'}
+              alt="SPARTA"
+              className="h-4 w-auto object-contain"
+            />
           </div>
           <button
             type="button"
@@ -190,9 +192,16 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             >
               {isMobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
-            <span className="font-display font-medium text-stone-900 dark:text-white tracking-wider">
-              SPARTA ADMIN
-            </span>
+            <div className="flex items-center gap-2">
+              <img
+                src={theme === 'dark' ? '/assets/brand/logo-white.png' : '/assets/brand/logo-black.png'}
+                alt="SPARTA"
+                className="h-3.5 w-auto object-contain"
+              />
+              <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-stone-100 dark:bg-white/10 text-stone-500">
+                Admin
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">

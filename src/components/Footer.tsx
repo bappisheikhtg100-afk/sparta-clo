@@ -15,17 +15,14 @@ export const Footer: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate('home')}
-              className="inline-flex items-center gap-3 cursor-pointer"
+              className="inline-flex items-center cursor-pointer"
             >
               <img
                 src={theme === 'dark' ? MEDIA_ASSETS.logoWhite : MEDIA_ASSETS.logoBlack}
-                alt="SPARTA emblem"
+                alt="SPARTA"
                 referrerPolicy="no-referrer"
-                className="h-10 w-auto object-contain"
+                className="h-5 sm:h-6 w-auto object-contain"
               />
-              <span className="font-display text-2xl font-semibold tracking-[0.26em] text-[#111111] dark:text-[#F5F4F0]">
-                SPARTA
-              </span>
             </button>
             <p className="text-sm text-stone-600 dark:text-zinc-400 max-w-sm leading-relaxed">
               Contemporary luxury apparel, tailored trousers, court footwear, and signature fragrances. Cash on Delivery nationwide across Bangladesh.

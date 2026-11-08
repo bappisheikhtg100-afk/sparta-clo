@@ -109,13 +109,28 @@ export const PATHAO_SANDBOX_DEFAULTS: PathaoCredentials = {
   isSandbox: true,
 };
 
+export const PATHAO_PRODUCTION_DEFAULTS: PathaoCredentials = {
+  clientId: 'M7e549Xd2v',
+  clientSecret: 'HkyIjgXODf9GYMK9jiBxUi8mK1fD2auU4iyQns46',
+  username: 'bappisheikhtg100@gmail.com',
+  password: '%SH$w$$vup6AgH3',
+  storeId: 500277, // Best Test Brand (Lalbagh, Dhaka)
+  isSandbox: false,
+};
+
 export function getStoredPathaoCredentials(): PathaoCredentials {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CREDS);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Auto-correct: If user credentials M7e549Xd2v are present with isSandbox=true, switch to false (they are live credentials)
+      if (parsed.clientId === 'M7e549Xd2v' && parsed.isSandbox) {
+        parsed.isSandbox = false;
+        parsed.storeId = parsed.storeId || 500277;
+        localStorage.setItem(STORAGE_KEY_CREDS, JSON.stringify(parsed));
+      }
       return {
-        ...PATHAO_SANDBOX_DEFAULTS,
+        ...PATHAO_PRODUCTION_DEFAULTS,
         ...parsed,
       };
     }
@@ -124,12 +139,13 @@ export function getStoredPathaoCredentials(): PathaoCredentials {
   }
 
   return {
-    clientId: (import.meta.env.VITE_PATHAO_CLIENT_ID as string) || PATHAO_SANDBOX_DEFAULTS.clientId,
-    clientSecret: (import.meta.env.VITE_PATHAO_CLIENT_SECRET as string) || PATHAO_SANDBOX_DEFAULTS.clientSecret,
-    username: (import.meta.env.VITE_PATHAO_USERNAME as string) || PATHAO_SANDBOX_DEFAULTS.username,
-    password: (import.meta.env.VITE_PATHAO_PASSWORD as string) || PATHAO_SANDBOX_DEFAULTS.password,
-    storeId: PATHAO_SANDBOX_DEFAULTS.storeId,
-    isSandbox: true,
+    ...PATHAO_PRODUCTION_DEFAULTS,
+    clientId: (import.meta.env.VITE_PATHAO_CLIENT_ID as string) || PATHAO_PRODUCTION_DEFAULTS.clientId,
+    clientSecret: (import.meta.env.VITE_PATHAO_CLIENT_SECRET as string) || PATHAO_PRODUCTION_DEFAULTS.clientSecret,
+    username: (import.meta.env.VITE_PATHAO_USERNAME as string) || PATHAO_PRODUCTION_DEFAULTS.username,
+    password: (import.meta.env.VITE_PATHAO_PASSWORD as string) || PATHAO_PRODUCTION_DEFAULTS.password,
+    storeId: 500277,
+    isSandbox: false,
   };
 }
 
@@ -142,6 +158,17 @@ export function savePathaoCredentials(creds: PathaoCredentials): void {
 }
 
 export function getBaseUrl(isSandbox?: boolean): string {
+  // When running in development / preview (localhost, port 3000, or cloud run),
+  // route through Vite reverse proxy to eliminate browser CORS blocks
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' ||
+      window.location.hostname.includes('run.app') ||
+      window.location.port === '3000' ||
+      window.location.origin.includes('ais-'))
+  ) {
+    return isSandbox ? '/pathao-proxy-sandbox' : '/pathao-proxy-live';
+  }
   return isSandbox
     ? 'https://courier-api-sandbox.pathao.com'
     : 'https://api-hermes.pathao.com';

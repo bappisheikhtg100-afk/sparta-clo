@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Search, X } from 'lucide-react';
-import { CATEGORIES, getDisplayPrice, PRODUCTS } from '../data/storeData';
+import { CATEGORIES, getDisplayPrice } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
 import { ProductCard } from './ProductCard';
 
@@ -15,7 +15,7 @@ export const CollectionSection: React.FC = () => {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
   const filteredProducts = useMemo(() => {
-    let list = products && products.length > 0 ? products : PRODUCTS;
+    let list = [...products];
 
     if (activeCategory === 'All' && !searchQuery.trim()) {
       list = list.filter((p) => p.featuredOnHome !== false);

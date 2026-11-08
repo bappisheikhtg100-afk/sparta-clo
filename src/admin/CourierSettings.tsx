@@ -22,6 +22,7 @@ import {
   PathaoCredentials,
   PathaoStore,
   PATHAO_SANDBOX_DEFAULTS,
+  PATHAO_PRODUCTION_DEFAULTS,
 } from '../services/pathaoService';
 import { CLOUDINARY_CONFIG } from '../services/cloudinaryService';
 import { useStore } from '../context/StoreContext';
@@ -146,7 +147,21 @@ export const CourierSettings: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCreds({ ...PATHAO_PRODUCTION_DEFAULTS });
+                  setTestResult({
+                    success: true,
+                    message: 'Your Live Pathao credentials loaded (Best Test Brand - Production mode). Click "Test Pathao Credentials" to verify.',
+                  });
+                }}
+                className="px-2.5 py-1 bg-stone-900 dark:bg-white text-white dark:text-black rounded text-[11px] font-medium transition-colors cursor-pointer"
+              >
+                Load My Live Credentials
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -158,11 +173,13 @@ export const CourierSettings: React.FC = () => {
                 }}
                 className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-700 dark:text-stone-300 rounded text-[11px] font-medium transition-colors cursor-pointer"
               >
-                Load Official Sandbox Preset
+                Load Sandbox Preset
               </button>
 
-              <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-[11px] text-stone-500 font-medium">Sandbox Mode</span>
+              <label className="flex items-center gap-1.5 ml-1 cursor-pointer">
+                <span className={`text-[11px] font-medium ${creds.isSandbox ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {creds.isSandbox ? 'Sandbox (Test)' : 'Production (Live)'}
+                </span>
                 <input
                   type="checkbox"
                   checked={creds.isSandbox}
@@ -173,16 +190,16 @@ export const CourierSettings: React.FC = () => {
             </div>
           </div>
 
-          {/* Auto-Address Notice */}
-          <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded text-[11px] text-blue-900 dark:text-blue-200 space-y-1">
+          {/* Auto-Address & Environment Notice */}
+          <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded text-[11px] text-emerald-900 dark:text-emerald-200 space-y-1">
             <div className="font-semibold flex items-center gap-1.5">
-              <span>Pathao Merchant Auto-Address Feature Active</span>
-              <span className="px-1.5 py-0.2 bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-100 text-[10px] rounded">
-                Official NLP
+              <span>Pathao Merchant Reverse-Proxy &amp; Auto-Address Active</span>
+              <span className="px-1.5 py-0.2 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 text-[10px] rounded">
+                Verified
               </span>
             </div>
-            <p className="text-blue-800 dark:text-blue-300">
-              According to official Pathao documentation, you don't need manual city or zone dropdowns. When dispatching, Pathao's automated address parsing engine populates recipient city, zone, and delivery hub directly from the customer's delivery address string.
+            <p className="text-emerald-800 dark:text-emerald-300">
+              API requests are routed through the backend reverse-proxy, eliminating browser CORS blocks. Pathao's official NLP engine automatically parses recipient address strings to populate city, zone, and delivery hubs.
             </p>
           </div>
 
@@ -315,6 +332,9 @@ export const CourierSettings: React.FC = () => {
               <code className="text-[11px] font-mono text-stone-700 dark:text-stone-300 select-all block break-all">
                 https://xqzzeisabqsqblogbvhb.supabase.co/functions/v1/pathao-webhook
               </code>
+              <p className="text-[10px] text-stone-500 mt-1.5 leading-relaxed">
+                <strong>How to get Webhook Secret:</strong> In your <a href="https://merchant.pathao.com" target="_blank" rel="noreferrer" className="underline text-blue-500">merchant.pathao.com</a> account, click <strong>Developer&apos;s API</strong> on the left sidebar &rarr; click <strong>Webhook Integration</strong> &rarr; paste the URL above &rarr; click Save. Pathao will generate your secret key. (Note: This is 100% optional; order creation and live parcel tracking work directly without it).
+              </p>
             </div>
           </div>
 

@@ -16,7 +16,7 @@ import { SmartImage } from './SmartImage';
 import { ProductCard } from './ProductCard';
 
 export const ProductDetailView: React.FC = () => {
-  const { selectedProduct, addToCart, navigate } = useStore();
+  const { selectedProduct, addToCart, navigate, products } = useStore();
   const [activeImage, setActiveImage] = useState(0);
   const [selectedColor, setSelectedColor] = useState<string | undefined>(undefined);
   const [selectedSize, setSelectedSize] = useState<string>('');
@@ -113,7 +113,9 @@ export const ProductDetailView: React.FC = () => {
     navigate('checkout');
   };
 
-  const relatedProducts = PRODUCTS.filter((p) => p.id !== selectedProduct.id).slice(0, 3);
+  const relatedProducts = (products && products.length > 0 ? products : PRODUCTS)
+    .filter((p) => p.id !== selectedProduct.id)
+    .slice(0, 3);
   const totalImages = selectedProduct.images.length;
   const stepImage = (dir: -1 | 1) => {
     setActiveImage((prev) => (prev + dir + totalImages) % totalImages);

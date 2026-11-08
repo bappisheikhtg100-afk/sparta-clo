@@ -38,25 +38,22 @@ export const Navbar: React.FC = () => {
   return (
     <header className="sticky top-0 z-40 w-full h-14 sm:h-16 bg-[#FAF9F6]/90 dark:bg-[#08080A]/90 backdrop-blur-md border-b border-stone-200/90 dark:border-zinc-800/90 transition-colors duration-200">
       <div className="max-w-[1440px] mx-auto h-full px-4 sm:px-8 lg:px-12 flex items-center justify-between gap-8">
-        {/* Zone 1: Brand Emblem + Classical Serif Wordmark */}
+        {/* Zone 1: Pure Typographic SPARTA Wordmark */}
         <a
           href="#top"
           onClick={(e) => {
             e.preventDefault();
             navigate('home');
           }}
-          className="inline-flex items-center gap-3 whitespace-nowrap shrink-0 min-h-[44px] group focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-current"
+          className="inline-flex items-center whitespace-nowrap shrink-0 min-h-[44px] group focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-current"
           aria-label="SPARTA Home"
         >
           <img
             src={theme === 'dark' ? MEDIA_ASSETS.logoWhite : MEDIA_ASSETS.logoBlack}
-            alt=""
+            alt="SPARTA"
             referrerPolicy="no-referrer"
-            className="h-8 sm:h-9 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
+            className="h-4 sm:h-5 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
           />
-          <span className="font-display text-xl sm:text-2xl font-semibold tracking-[0.26em] text-[#111111] dark:text-[#F5F4F0]">
-            SPARTA
-          </span>
         </a>
 
         {/* Zone 2: Minimalist Single-Line Editorial Navigation */}

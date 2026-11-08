@@ -12,7 +12,7 @@ import {
   ToastMessage,
 } from '../types/store';
 import { formatBDT, STORE_INFO, PRODUCTS as STATIC_PRODUCTS } from '../data/storeData';
-import { fetchPublishedProducts } from '../services/productService';
+import { fetchPublishedProducts, getLocalStoredProducts } from '../services/productService';
 import { createOrderRecord } from '../services/orderService';
 import {
   DEFAULT_STORE_SETTINGS,
@@ -106,7 +106,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return null;
   });
 
-  const [products, setProducts] = useState<Product[]>(STATIC_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>(getLocalStoredProducts);
   const [currentRoute, setCurrentRoute] = useState<RouteView>(() => {
     if (typeof window !== 'undefined' && window.location.hash === '#admin') {
       return 'admin';
@@ -135,11 +135,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const refreshProducts = useCallback(async () => {
     try {
       const live = await fetchPublishedProducts();
-      if (live && live.length > 0) {
-        setProducts(live);
-      }
+      setProducts(live);
     } catch {
-      // keep existing
+      setProducts(getLocalStoredProducts());
     }
   }, []);
 
@@ -160,6 +158,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     refreshProducts();
     loadSettingsAndCoupons();
   }, [refreshProducts, loadSettingsAndCoupons]);
+
+  // Real-time synchronization when products are created, edited, or deleted in Admin
+  useEffect(() => {
+    const handleProductsUpdated = (e: any) => {
+      const updatedList = e.detail || getLocalStoredProducts();
+      setProducts(updatedList);
+    };
+    window.addEventListener('sparta_products_updated', handleProductsUpdated);
+    return () => window.removeEventListener('sparta_products_updated', handleProductsUpdated);
+  }, []);
 
   useEffect(() => {
     const handleHashChange = () => {

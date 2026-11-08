@@ -1,12 +1,12 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight } from 'lucide-react';
-import { formatBDT, MEDIA_ASSETS, PRODUCTS, STORE_INFO } from '../data/storeData';
+import { formatBDT, MEDIA_ASSETS, STORE_INFO } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
 import { SmartImage } from './SmartImage';
 
 export const AtelierSection: React.FC = () => {
-  const { lastOrder, navigate, jumpToCategory } = useStore();
+  const { lastOrder, navigate, jumpToCategory, products } = useStore();
 
   const houseCodes = [
     {
@@ -32,8 +32,8 @@ export const AtelierSection: React.FC = () => {
     },
   ];
 
-  const capProduct = PRODUCTS.find((p) => p.id === 'sparta-004') || PRODUCTS[0];
-  const shoeProduct = PRODUCTS.find((p) => p.id === 'sparta-003') || PRODUCTS[0];
+  const capProduct = products.find((p) => p.category === 'Accessories') || products[0];
+  const shoeProduct = products.find((p) => p.category === 'Shoes/Sneakers') || products[1] || products[0];
 
   return (
     <section

@@ -22,6 +22,20 @@ export default defineConfig(({ command }) => {
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      proxy: {
+        '/pathao-proxy-live': {
+          target: 'https://api-hermes.pathao.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/pathao-proxy-live/, ''),
+          secure: true,
+        },
+        '/pathao-proxy-sandbox': {
+          target: 'https://courier-api-sandbox.pathao.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/pathao-proxy-sandbox/, ''),
+          secure: true,
+        },
+      },
     },
   };
 });
