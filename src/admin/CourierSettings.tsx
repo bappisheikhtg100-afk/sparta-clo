@@ -13,6 +13,10 @@ import {
   Cloud,
   Megaphone,
   Share2,
+  Copy,
+  ExternalLink,
+  Database,
+  Code,
 } from 'lucide-react';
 import {
   getStoredPathaoCredentials,
@@ -47,6 +51,104 @@ export const CourierSettings: React.FC = () => {
   const [stores, setStores] = useState<PathaoStore[]>([]);
   const [isFetchingStores, setIsFetchingStores] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isSqlCopied, setIsSqlCopied] = useState(false);
+
+  const SUPABASE_FIX_SQL = `-- 1. ENABLE HTTP EXTENSION
+CREATE EXTENSION IF NOT EXISTS http WITH SCHEMA extensions;
+
+-- 2. GRANT PERMISSIONS ON ALL PUBLIC TABLES & SCHEMAS
+GRANT USAGE ON SCHEMA public, extensions TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+
+-- 3. CREATE SECURE PATHAO PROXY FUNCTION
+CREATE OR REPLACE FUNCTION public.pathao_proxy(
+  endpoint text,
+  method text DEFAULT 'GET',
+  headers jsonb DEFAULT '{}'::jsonb,
+  payload jsonb DEFAULT null,
+  is_sandbox boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE
+  base_url text;
+  full_url text;
+  req_headers extensions.http_header[];
+  header_key text;
+  resp extensions.http_response;
+  resp_json jsonb;
+BEGIN
+  IF is_sandbox THEN
+    base_url := 'https://courier-api-sandbox.pathao.com';
+  ELSE
+    base_url := 'https://api-hermes.pathao.com';
+  END IF;
+
+  full_url := base_url || endpoint;
+
+  req_headers := array[
+    extensions.http_header('Accept', 'application/json'),
+    extensions.http_header('Content-Type', 'application/json')
+  ];
+
+  IF headers IS NOT NULL THEN
+    FOR header_key IN SELECT jsonb_object_keys(headers) LOOP
+      req_headers := array_append(req_headers, extensions.http_header(header_key, headers->>header_key));
+    END LOOP;
+  END IF;
+
+  IF upper(method) = 'POST' THEN
+    resp := extensions.http((
+      'POST',
+      full_url,
+      req_headers,
+      'application/json',
+      payload::text
+    )::extensions.http_request);
+  ELSE
+    resp := extensions.http((
+      'GET',
+      full_url,
+      req_headers,
+      null,
+      null
+    )::extensions.http_request);
+  END IF;
+
+  BEGIN
+    resp_json := resp.content::jsonb;
+    RETURN resp_json;
+  EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+      'status', resp.status,
+      'raw_content', resp.content
+    );
+  END;
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object(
+    'error', true,
+    'status', 500,
+    'message', SQLERRM
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.pathao_proxy(text, text, jsonb, jsonb, boolean) TO anon, authenticated, service_role;`;
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SUPABASE_FIX_SQL);
+    setIsSqlCopied(true);
+    setTimeout(() => setIsSqlCopied(false), 3500);
+  };
 
   // Delivery fee rules
   const [insideDhakaFee, setInsideDhakaFee] = useState(String(storeSettings.insideDhakaFee || 70));
@@ -200,6 +302,47 @@ export const CourierSettings: React.FC = () => {
             </div>
             <p className="text-emerald-800 dark:text-emerald-300">
               API requests are routed through the backend reverse-proxy, eliminating browser CORS blocks. Pathao's official NLP engine automatically parses recipient address strings to populate city, zone, and delivery hubs.
+            </p>
+          </div>
+
+          {/* GitHub Pages & Supabase Backend Proxy Fix Banner */}
+          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded text-stone-800 dark:text-stone-200 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-medium text-xs text-amber-700 dark:text-amber-400">
+                <Database className="w-4 h-4" />
+                <span>GitHub Pages CORS &amp; Pathao Proxy Setup (১ মিনিটে সমাধান)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href="https://supabase.com/dashboard/project/xqzzeisabqsqblogbvhb/sql/new"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-stone-200 hover:bg-stone-300 dark:bg-white/10 dark:hover:bg-white/15 text-stone-800 dark:text-stone-200 rounded font-medium transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Supabase SQL Editor
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCopySql}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 text-[11px] bg-amber-600 hover:bg-amber-700 text-white rounded font-medium shadow-sm transition-all cursor-pointer"
+                >
+                  {isSqlCopied ? (
+                    <>
+                      <CheckCircle className="w-3.5 h-3.5 text-white" />
+                      <span>Copied to Clipboard!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Supabase SQL Fix</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            <p className="text-[11px] text-stone-600 dark:text-stone-400 leading-relaxed">
+              GitHub Pages স্ট্যাটিক সাইট হওয়ায় ব্রাউজার সিকিউরিটি (CORS) সরাসরি পাঠাও এপিআই ব্লক করে (&apos;Failed to fetch&apos;)। এটি ঠিক করতে উপরের <strong>Copy Supabase SQL Fix</strong> বাটনে ক্লিক করে কোডটি কপি করুন এবং <strong>Supabase SQL Editor</strong>-এ পেস্ট করে <strong>Run</strong> করুন। এটি সম্পূর্ণ ফ্রিতে আপনার Supabase ব্যাকএন্ড দিয়ে পাঠাও রিকোয়েস্ট প্রক্সি করে দেবে।
             </p>
           </div>
 

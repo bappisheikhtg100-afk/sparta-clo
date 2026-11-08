@@ -9,7 +9,10 @@
  *  - Consignment Status Tracking (/aladdin/api/v1/orders/{consignment_id}/info)
  *  - Nationwide City, Zone, and Area discovery
  *  - Live shipping fee rate calculation
+ *  - Hybrid Gateway: Local Vite reverse proxy in development + Supabase Database RPC Proxy in production on GitHub Pages (eliminating all browser CORS blocks)
  */
+
+import { supabase } from '../lib/supabase';
 
 export interface PathaoCredentials {
   clientId: string;
@@ -158,8 +161,6 @@ export function savePathaoCredentials(creds: PathaoCredentials): void {
 }
 
 export function getBaseUrl(isSandbox?: boolean): string {
-  // When running in development / preview (localhost, port 3000, or cloud run),
-  // route through Vite reverse proxy to eliminate browser CORS blocks
   if (
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' ||
@@ -172,6 +173,115 @@ export function getBaseUrl(isSandbox?: boolean): string {
   return isSandbox
     ? 'https://courier-api-sandbox.pathao.com'
     : 'https://api-hermes.pathao.com';
+}
+
+/**
+ * Universal Pathao API executor:
+ * - Uses Vite Dev Reverse Proxy when running locally or in preview
+ * - Uses Supabase Database RPC Proxy (`pathao_proxy`) when deployed on GitHub Pages (static host)
+ *   to eliminate browser CORS blocks ("Failed to fetch").
+ */
+export async function executePathaoCall<T>(
+  endpoint: string,
+  options: {
+    method?: 'GET' | 'POST';
+    headers?: Record<string, string>;
+    body?: any;
+    creds?: PathaoCredentials;
+  } = {}
+): Promise<T> {
+  const method = options.method || 'GET';
+  const creds = options.creds || getStoredPathaoCredentials();
+  const isDev =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' ||
+      window.location.hostname.includes('run.app') ||
+      window.location.port === '3000' ||
+      window.location.origin.includes('ais-'));
+
+  // 1. If running locally with Vite proxy server
+  if (isDev) {
+    const proxyBase = creds.isSandbox ? '/pathao-proxy-sandbox' : '/pathao-proxy-live';
+    const res = await fetch(`${proxyBase}${endpoint}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(options.headers || {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      let msg = errText;
+      try {
+        const parsed = JSON.parse(errText);
+        msg = parsed.message || (parsed.errors ? Object.values(parsed.errors).flat().join(', ') : errText);
+      } catch {
+        // raw
+      }
+      throw new Error(`Pathao API error (${res.status}): ${msg}`);
+    }
+
+    return (await res.json()) as T;
+  }
+
+  // 2. Production on GitHub Pages: Execute via Supabase Database RPC Proxy
+  try {
+    const { data, error } = await supabase.rpc('pathao_proxy', {
+      endpoint,
+      method,
+      headers: options.headers || {},
+      payload: options.body || null,
+      is_sandbox: !!creds.isSandbox,
+    });
+
+    if (error) {
+      if (error.code === 'PGRST202' || error.message?.includes('pathao_proxy')) {
+        throw new Error(
+          'GitHub Pages-এ Pathao API চালানোর জন্য Supabase-এ একবার SQL স্ক্রিপ্ট রান করতে হবে। Settings & Integrations থেকে "Copy Supabase SQL Fix" বাটনে ক্লিক করে Supabase SQL Editor-এ Paste করে Run করুন।'
+        );
+      }
+      throw new Error(`Supabase Proxy error: ${error.message}`);
+    }
+
+    if (data && typeof data === 'object' && 'error' in data && data.error) {
+      throw new Error(data.message || 'Pathao API call rejected by courier gateway');
+    }
+
+    return data as T;
+  } catch (err: any) {
+    if (err.message && err.message.includes('Supabase-এ একবার SQL')) {
+      throw err;
+    }
+
+    // Try direct fetch as fallback
+    try {
+      const directBase = creds.isSandbox
+        ? 'https://courier-api-sandbox.pathao.com'
+        : 'https://api-hermes.pathao.com';
+      const directRes = await fetch(`${directBase}${endpoint}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(options.headers || {}),
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+
+      if (directRes.ok) {
+        return (await directRes.json()) as T;
+      }
+    } catch {
+      // ignore
+    }
+
+    throw new Error(
+      `GitHub Pages-এ ব্রাউজার CORS ব্লকের কারণে Pathao সরাসরি ব্লক হয়। সমাধান: Settings & Integrations থেকে "Copy Supabase SQL Fix" কপি করে Supabase SQL Editor-এ একবার Run করুন। (${err.message || 'Failed to fetch'})`
+    );
+  }
 }
 
 /**
@@ -216,28 +326,22 @@ export async function getPathaoAccessToken(
     }
   }
 
-  const baseUrl = getBaseUrl(creds.isSandbox);
-  const response = await fetch(`${baseUrl}/aladdin/api/v1/issue-token`, {
+  const data = await executePathaoCall<PathaoTokenResponse>('/aladdin/api/v1/issue-token', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({
+    creds,
+    body: {
       client_id: creds.clientId.trim(),
       client_secret: creds.clientSecret.trim(),
       username: creds.username.trim(),
       password: creds.password.trim(),
       grant_type: 'password',
-    }),
+    },
   });
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Failed to issue Pathao access token (${response.status}): ${err}`);
+  if (!data?.access_token) {
+    throw new Error('No access_token returned by Pathao API. Please check your credentials.');
   }
 
-  const data: PathaoTokenResponse = await response.json();
   const token = data.access_token;
   const expiresAt = Date.now() + (data.expires_in || 3600) * 1000;
 
@@ -256,20 +360,15 @@ export async function getPathaoAccessToken(
 export async function fetchPathaoStores(customCreds?: PathaoCredentials): Promise<PathaoStore[]> {
   const creds = customCreds || getStoredPathaoCredentials();
   const token = await getPathaoAccessToken(creds);
-  const baseUrl = getBaseUrl(creds.isSandbox);
 
-  const response = await fetch(`${baseUrl}/aladdin/api/v1/stores`, {
+  const json = await executePathaoCall<any>('/aladdin/api/v1/stores', {
+    method: 'GET',
+    creds,
     headers: {
       Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch Pathao stores (${response.status})`);
-  }
-
-  const json = await response.json();
   const list = json?.data?.data || json?.data || [];
   return Array.isArray(list) ? list : [];
 }
@@ -280,20 +379,15 @@ export async function fetchPathaoStores(customCreds?: PathaoCredentials): Promis
 export async function fetchPathaoCities(customCreds?: PathaoCredentials): Promise<PathaoCity[]> {
   const creds = customCreds || getStoredPathaoCredentials();
   const token = await getPathaoAccessToken(creds);
-  const baseUrl = getBaseUrl(creds.isSandbox);
 
-  const response = await fetch(`${baseUrl}/aladdin/api/v1/city-list`, {
+  const json = await executePathaoCall<any>('/aladdin/api/v1/city-list', {
+    method: 'GET',
+    creds,
     headers: {
       Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch cities (${response.status})`);
-  }
-
-  const json = await response.json();
   const list = json?.data?.data || json?.data || [];
   return Array.isArray(list) ? list : [];
 }
@@ -304,20 +398,15 @@ export async function fetchPathaoCities(customCreds?: PathaoCredentials): Promis
 export async function fetchPathaoZones(cityId: number, customCreds?: PathaoCredentials): Promise<PathaoZone[]> {
   const creds = customCreds || getStoredPathaoCredentials();
   const token = await getPathaoAccessToken(creds);
-  const baseUrl = getBaseUrl(creds.isSandbox);
 
-  const response = await fetch(`${baseUrl}/aladdin/api/v1/cities/${cityId}/zone-list`, {
+  const json = await executePathaoCall<any>(`/aladdin/api/v1/cities/${cityId}/zone-list`, {
+    method: 'GET',
+    creds,
     headers: {
       Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch zones for city ${cityId}`);
-  }
-
-  const json = await response.json();
   const list = json?.data?.data || json?.data || [];
   return Array.isArray(list) ? list : [];
 }
@@ -328,20 +417,15 @@ export async function fetchPathaoZones(cityId: number, customCreds?: PathaoCrede
 export async function fetchPathaoAreas(zoneId: number, customCreds?: PathaoCredentials): Promise<PathaoArea[]> {
   const creds = customCreds || getStoredPathaoCredentials();
   const token = await getPathaoAccessToken(creds);
-  const baseUrl = getBaseUrl(creds.isSandbox);
 
-  const response = await fetch(`${baseUrl}/aladdin/api/v1/zones/${zoneId}/area-list`, {
+  const json = await executePathaoCall<any>(`/aladdin/api/v1/zones/${zoneId}/area-list`, {
+    method: 'GET',
+    creds,
     headers: {
       Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch areas for zone ${zoneId}`);
-  }
-
-  const json = await response.json();
   const list = json?.data?.data || json?.data || [];
   return Array.isArray(list) ? list : [];
 }
@@ -357,30 +441,23 @@ export async function calculatePathaoPrice(params: {
 }): Promise<number> {
   const creds = getStoredPathaoCredentials();
   const token = await getPathaoAccessToken(creds);
-  const baseUrl = getBaseUrl(creds.isSandbox);
 
-  const response = await fetch(`${baseUrl}/aladdin/api/v1/merchant/price-plan`, {
+  const json = await executePathaoCall<any>('/aladdin/api/v1/merchant/price-plan', {
     method: 'POST',
+    creds,
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
     },
-    body: JSON.stringify({
+    body: {
       store_id: params.storeId,
       item_type: 2, // Parcel
       delivery_type: 48, // Standard delivery
       item_weight: params.itemWeightKg || 0.5,
       recipient_city: params.recipientCityId || 1,
       recipient_zone: params.recipientZoneId || 1,
-    }),
+    },
   });
 
-  if (!response.ok) {
-    throw new Error('Could not calculate shipping rate');
-  }
-
-  const json = await response.json();
   return json?.data?.final_price || json?.data?.price || 0;
 }
 
@@ -390,23 +467,15 @@ export async function calculatePathaoPrice(params: {
  */
 async function buildCompliantOrderBody(
   payload: PathaoCreateOrderPayload,
-  creds: PathaoCredentials,
-  token: string,
-  baseUrl: string
+  creds: PathaoCredentials
 ): Promise<Record<string, any>> {
   // Resolve store ID
   let storeId = payload.store_id || creds.storeId;
   if (!storeId || storeId === 0) {
     try {
-      const storesRes = await fetch(`${baseUrl}/aladdin/api/v1/stores`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-      });
-      if (storesRes.ok) {
-        const storesJson = await storesRes.json();
-        const storeList = storesJson?.data?.data || storesJson?.data || [];
-        if (storeList.length > 0) {
-          storeId = storeList[0].store_id;
-        }
+      const storeList = await fetchPathaoStores(creds);
+      if (storeList.length > 0) {
+        storeId = storeList[0].store_id;
       }
     } catch {
       // ignore
@@ -456,8 +525,6 @@ async function buildCompliantOrderBody(
   }
 
   // Auto-address feature: Only include city/zone/area if explicitly valid integers > 0
-  // Pathao explicitly warns: "do not send a null value. If not included in the request payload,
-  // then our system will populate it automatically based on the recipient_address you will be provided."
   if (payload.recipient_city && payload.recipient_city > 0) {
     body.recipient_city = payload.recipient_city;
   }
@@ -481,35 +548,17 @@ export async function createPathaoOrder(
 ): Promise<PathaoOrderResult> {
   const creds = customCreds || getStoredPathaoCredentials();
   const token = await getPathaoAccessToken(creds);
-  const baseUrl = getBaseUrl(creds.isSandbox);
+  const body = await buildCompliantOrderBody(payload, creds);
 
-  const body = await buildCompliantOrderBody(payload, creds, token, baseUrl);
-
-  const response = await fetch(`${baseUrl}/aladdin/api/v1/orders`, {
+  const json = await executePathaoCall<any>('/aladdin/api/v1/orders', {
     method: 'POST',
+    creds,
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
     },
-    body: JSON.stringify(body),
+    body,
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    let parsedMessage = errorText;
-    try {
-      const errJson = JSON.parse(errorText);
-      parsedMessage =
-        errJson.message ||
-        (errJson.errors ? Object.values(errJson.errors).flat().join(', ') : errorText);
-    } catch {
-      // raw text
-    }
-    throw new Error(`Pathao dispatch failed (${response.status}): ${parsedMessage}`);
-  }
-
-  const json = await response.json();
   const data = json?.data || {};
 
   return {
@@ -532,28 +581,20 @@ export async function createPathaoBulkOrders(
 
   const creds = customCreds || getStoredPathaoCredentials();
   const token = await getPathaoAccessToken(creds);
-  const baseUrl = getBaseUrl(creds.isSandbox);
 
   const orderObjects = await Promise.all(
-    payloads.map((p) => buildCompliantOrderBody(p, creds, token, baseUrl))
+    payloads.map((p) => buildCompliantOrderBody(p, creds))
   );
 
-  const response = await fetch(`${baseUrl}/aladdin/api/v1/orders/bulk`, {
+  const json = await executePathaoCall<any>('/aladdin/api/v1/orders/bulk', {
     method: 'POST',
+    creds,
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json; charset=UTF-8',
-      Accept: 'application/json',
     },
-    body: JSON.stringify({ orders: orderObjects }),
+    body: { orders: orderObjects },
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Pathao bulk dispatch failed (${response.status}): ${errText}`);
-  }
-
-  const json = await response.json();
   return {
     success: true,
     message: json?.message || 'Bulk orders submitted successfully to Pathao.',
@@ -569,21 +610,15 @@ export async function trackPathaoOrder(
 ): Promise<PathaoTrackingInfo> {
   const creds = customCreds || getStoredPathaoCredentials();
   const token = await getPathaoAccessToken(creds);
-  const baseUrl = getBaseUrl(creds.isSandbox);
 
-  const response = await fetch(`${baseUrl}/aladdin/api/v1/orders/${consignmentId}/info`, {
+  const json = await executePathaoCall<any>(`/aladdin/api/v1/orders/${consignmentId}/info`, {
+    method: 'GET',
+    creds,
     headers: {
       Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
     },
   });
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Failed to track consignment ${consignmentId} (${response.status}): ${err}`);
-  }
-
-  const json = await response.json();
   const data = json?.data || {};
 
   return {
