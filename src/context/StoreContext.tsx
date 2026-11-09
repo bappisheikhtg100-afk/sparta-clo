@@ -256,11 +256,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       quantity = 1,
       openDrawer = true
     ) => {
-      const colorImgIndex =
-        color && product.colors
-          ? product.colors.find((c) => c.name === color)?.imageIndex ?? 0
-          : 0;
-      const chosenImage = product.images[colorImgIndex] || product.images[0];
+      const matchedColor =
+        color && product.colors ? product.colors.find((c) => c.name === color) : undefined;
+      const chosenImage =
+        matchedColor?.imageUrl ||
+        (product.colorImages && color ? product.colorImages[color] : undefined) ||
+        (matchedColor?.imageIndex !== undefined ? product.images[matchedColor.imageIndex] : undefined) ||
+        product.images[0];
 
       setCart((prev) => {
         const existingIndex = prev.findIndex(

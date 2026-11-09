@@ -13,12 +13,27 @@ import {
   Loader2,
   Star,
   Info,
+  Pipette,
+  Palette,
 } from 'lucide-react';
-import { Product, Category, StockStatus } from '../types/store';
+import { Product, Category, StockStatus, ColorSwatch } from '../types/store';
 import { uploadToCloudinary } from '../services/cloudinaryService';
 import { upsertProduct, deleteProduct, toggleProductPublish } from '../services/productService';
 import { formatBDT } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
+
+export const LUXURY_COLOR_PRESETS = [
+  { name: 'Onyx Black', hex: '#111111' },
+  { name: 'Bone White', hex: '#F5F5F0' },
+  { name: 'Charcoal Grey', hex: '#2B2B2B' },
+  { name: 'Olive Green', hex: '#4A5340' },
+  { name: 'Midnight Navy', hex: '#1A2436' },
+  { name: 'Burgundy Crimson', hex: '#581825' },
+  { name: 'Desert Sand', hex: '#D8CBB5' },
+  { name: 'Espresso Brown', hex: '#5C4033' },
+  { name: 'Atelier Gold', hex: '#C5A059' },
+  { name: 'Military Khaki', hex: '#8F8B66' },
+];
 
 interface ProductManagementProps {
   products: (Product & { is_published?: boolean })[];
@@ -52,7 +67,9 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   const [formFeaturedOnHome, setFormFeaturedOnHome] = useState(true);
   const [formImages, setFormImages] = useState<string[]>([]);
   const [formHoverIndex, setFormHoverIndex] = useState(1);
-  const [formSizeImages, setFormSizeImages] = useState<Record<string, string>>({});
+  const [formColors, setFormColors] = useState<ColorSwatch[]>([
+    { name: 'Onyx Black', hex: '#111111', imageIndex: 0 },
+  ]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -71,7 +88,9 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setFormFeaturedOnHome(true);
     setFormImages([]);
     setFormHoverIndex(1);
-    setFormSizeImages({});
+    setFormColors([
+      { name: 'Onyx Black', hex: '#111111', imageIndex: 0 },
+    ]);
     setUploadError(null);
     setIsModalOpen(true);
   };
@@ -90,9 +109,60 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setFormFeaturedOnHome(p.featuredOnHome ?? true);
     setFormImages(p.images || []);
     setFormHoverIndex(p.hoverImageIndex ?? 1);
-    setFormSizeImages(p.sizeImages || {});
+    setFormColors(
+      p.colors && p.colors.length > 0
+        ? p.colors.map((c) => ({
+            ...c,
+            imageUrl:
+              c.imageUrl ||
+              (p.colorImages && p.colorImages[c.name]) ||
+              (c.imageIndex !== undefined ? p.images[c.imageIndex] : undefined),
+          }))
+        : [{ name: 'Onyx Black', hex: '#111111', imageIndex: 0 }]
+    );
     setUploadError(null);
     setIsModalOpen(true);
+  };
+
+  const handleAddColor = () => {
+    const nextIdx = Math.min(formColors.length, Math.max(0, formImages.length - 1));
+    const preset = LUXURY_COLOR_PRESETS[formColors.length % LUXURY_COLOR_PRESETS.length];
+    setFormColors((prev) => [
+      ...prev,
+      {
+        name: preset.name,
+        hex: preset.hex,
+        imageIndex: nextIdx,
+        imageUrl: formImages[nextIdx] || '',
+      },
+    ]);
+  };
+
+  const handleUpdateColor = (index: number, updates: Partial<ColorSwatch>) => {
+    setFormColors((prev) =>
+      prev.map((c, i) => (i === index ? { ...c, ...updates } : c))
+    );
+  };
+
+  const handleRemoveColor = (index: number) => {
+    setFormColors((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handlePickColorFromScreen = async (index: number) => {
+    if (typeof window !== 'undefined' && (window as any).EyeDropper) {
+      try {
+        const eyeDropper = new (window as any).EyeDropper();
+        const result = await eyeDropper.open();
+        if (result?.sRGBHex) {
+          handleUpdateColor(index, { hex: result.sRGBHex });
+        }
+      } catch {
+        // User cancelled picker
+      }
+    } else {
+      const el = document.getElementById(`native-color-picker-${index}`) as HTMLInputElement;
+      if (el) el.click();
+    }
   };
 
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,6 +222,20 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
         .map((s) => s.trim())
         .filter(Boolean);
 
+      // Build color-to-image mapping
+      const colorImagesMap: Record<string, string> = {};
+      formColors.forEach((c) => {
+        const chosenImg =
+          c.imageUrl ||
+          (c.imageIndex !== undefined && formImages[c.imageIndex]
+            ? formImages[c.imageIndex]
+            : undefined) ||
+          formImages[0];
+        if (chosenImg) {
+          colorImagesMap[c.name] = chosenImg;
+        }
+      });
+
       const productPayload: Product = {
         id: productId,
         name: formName.trim(),
@@ -164,6 +248,8 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
           .map((d) => d.trim())
           .filter(Boolean),
         sizes: parsedSizes,
+        colors: formColors.length > 0 ? formColors : undefined,
+        colorImages: Object.keys(colorImagesMap).length > 0 ? colorImagesMap : undefined,
         stock: formStock,
         stockCount: formStockCount ? Number(formStockCount) : 10,
         featuredOnHome: formFeaturedOnHome,
@@ -174,7 +260,6 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
         hoverImageIndex: formHoverIndex,
         hoverFit: 'cover-top',
         imageFit: 'cover-top',
-        sizeImages: Object.keys(formSizeImages).length > 0 ? formSizeImages : undefined,
       };
 
       await upsertProduct(productPayload, true);
@@ -644,43 +729,205 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                   </div>
                 )}
 
-                {/* Optional Size-Specific Image Mapping */}
-                {parsedFormSizes.length > 0 && formImages.length > 0 && (
-                  <div className="pt-3 border-t border-stone-100 dark:border-white/5 space-y-2">
-                    <span className="block uppercase tracking-wider text-stone-500 font-medium text-[11px]">
-                      Variant / Size-Specific Image Mapping (Optional)
-                    </span>
-                    <p className="text-[10px] text-stone-400">
-                      Link a specific photo to display automatically when a customer picks this size or volume.
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {parsedFormSizes.map((size) => (
-                        <div key={size} className="p-2 border border-stone-200 dark:border-white/10 rounded">
-                          <div className="font-semibold text-stone-900 dark:text-white text-[11px] mb-1">
-                            Size: {size}
-                          </div>
-                          <select
-                            value={formSizeImages[size] || ''}
-                            onChange={(e) =>
-                              setFormSizeImages({
-                                ...formSizeImages,
-                                [size]: e.target.value,
-                              })
-                            }
-                            className="w-full text-[10px] bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 rounded p-1 outline-none"
-                          >
-                            <option value="">Default Product Photo</option>
-                            {formImages.map((img, i) => (
-                              <option key={i} value={img}>
-                                Photo #{i + 1}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ))}
+                {/* Colorways & Color-Specific Photos Section */}
+                <div className="pt-4 border-t border-stone-200 dark:border-white/10 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Palette className="w-4 h-4 text-stone-700 dark:text-stone-300" />
+                        <span className="font-semibold text-stone-900 dark:text-white text-xs uppercase tracking-wider">
+                          Colorways &amp; Color-Specific Photos ({formColors.length})
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-stone-400 mt-0.5">
+                        Link specific photos to colors. When a customer picks a color, the gallery switches to that photo automatically. Customers can choose any size with any color.
+                      </p>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={handleAddColor}
+                      className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-900 dark:text-white text-[11px] font-medium rounded-sm inline-flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Color</span>
+                    </button>
                   </div>
-                )}
+
+                  {formColors.length === 0 ? (
+                    <div className="p-4 border border-dashed border-stone-300 dark:border-white/15 text-center text-stone-400 rounded">
+                      <p className="text-[11px]">No colorways configured. This piece will use standard product photos.</p>
+                      <button
+                        type="button"
+                        onClick={handleAddColor}
+                        className="mt-2 px-3 py-1 bg-stone-900 text-white dark:bg-white dark:text-black text-[11px] font-medium rounded cursor-pointer"
+                      >
+                        + Add First Color
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {formColors.map((color, idx) => {
+                        const activeImgSrc =
+                          color.imageUrl ||
+                          (color.imageIndex !== undefined && formImages[color.imageIndex]
+                            ? formImages[color.imageIndex]
+                            : undefined) ||
+                          formImages[0];
+
+                        return (
+                          <div
+                            key={idx}
+                            className="p-3 bg-stone-50/70 dark:bg-white/[0.02] border border-stone-200 dark:border-white/10 rounded space-y-2.5"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                              {/* Color Name & Swatch Hex */}
+                              <div className="flex items-center gap-2 flex-1">
+                                <div className="relative shrink-0">
+                                  <input
+                                    id={`native-color-picker-${idx}`}
+                                    type="color"
+                                    value={color.hex || '#111111'}
+                                    onChange={(e) => handleUpdateColor(idx, { hex: e.target.value })}
+                                    className="w-7 h-7 rounded border border-stone-300 dark:border-white/20 p-0 cursor-pointer overflow-hidden"
+                                    title="Choose color"
+                                  />
+                                </div>
+
+                                <input
+                                  type="text"
+                                  value={color.name}
+                                  onChange={(e) => handleUpdateColor(idx, { name: e.target.value })}
+                                  placeholder="e.g. Onyx Black"
+                                  className="w-36 px-2.5 py-1.5 bg-white dark:bg-black/40 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded text-xs outline-none"
+                                />
+
+                                <input
+                                  type="text"
+                                  value={color.hex}
+                                  onChange={(e) => handleUpdateColor(idx, { hex: e.target.value })}
+                                  placeholder="#111111"
+                                  className="w-20 px-2 py-1.5 font-mono text-[11px] bg-white dark:bg-black/40 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded outline-none"
+                                />
+
+                                {/* Eyedropper Tool to pick color from photo / screen */}
+                                <button
+                                  type="button"
+                                  onClick={() => handlePickColorFromScreen(idx)}
+                                  title="Pick color from image or screen with eyedropper"
+                                  className="p-1.5 bg-white hover:bg-stone-100 dark:bg-white/10 dark:hover:bg-white/20 border border-stone-200 dark:border-white/10 text-stone-700 dark:text-stone-300 rounded cursor-pointer transition-colors"
+                                >
+                                  <Pipette className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              {/* Photo Selection for this Color */}
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 text-[11px] text-stone-500">
+                                  <ImageIcon className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                                  <span>Photo:</span>
+                                </div>
+
+                                <select
+                                  value={
+                                    color.imageUrl
+                                      ? 'custom'
+                                      : color.imageIndex !== undefined
+                                      ? String(color.imageIndex)
+                                      : '0'
+                                  }
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === 'custom') {
+                                      handleUpdateColor(idx, {
+                                        imageUrl: color.imageUrl || formImages[0] || '',
+                                      });
+                                    } else {
+                                      const num = Number(val);
+                                      handleUpdateColor(idx, {
+                                        imageIndex: num,
+                                        imageUrl: formImages[num] || undefined,
+                                      });
+                                    }
+                                  }}
+                                  className="text-[11px] bg-white dark:bg-black/40 border border-stone-200 dark:border-white/10 rounded px-2 py-1.5 outline-none"
+                                >
+                                  {formImages.map((_, imgI) => (
+                                    <option key={imgI} value={imgI}>
+                                      Photo #{imgI + 1}
+                                    </option>
+                                  ))}
+                                  <option value="custom">Custom Photo URL...</option>
+                                </select>
+
+                                {activeImgSrc && (
+                                  <div className="w-7 h-9 rounded overflow-hidden border border-stone-300 dark:border-white/20 shrink-0 bg-stone-100 dark:bg-stone-800">
+                                    <img
+                                      src={activeImgSrc}
+                                      alt="Thumbnail"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+                                )}
+
+                                {formColors.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveColor(idx)}
+                                    className="p-1 text-stone-400 hover:text-rose-500 cursor-pointer transition-colors"
+                                    title="Remove this colorway"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Custom URL Input if selected */}
+                            {color.imageUrl && (
+                              <div className="flex items-center gap-2 pt-1 border-t border-stone-200/50 dark:border-white/5">
+                                <span className="text-[10px] text-stone-400 shrink-0">Direct Image URL:</span>
+                                <input
+                                  type="url"
+                                  value={color.imageUrl}
+                                  onChange={(e) => handleUpdateColor(idx, { imageUrl: e.target.value })}
+                                  placeholder="https://..."
+                                  className="w-full px-2 py-1 text-[11px] font-mono bg-white dark:bg-black/40 border border-stone-200 dark:border-white/10 rounded outline-none"
+                                />
+                              </div>
+                            )}
+
+                            {/* Quick Preset Palette Chips */}
+                            <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-stone-100 dark:border-white/5">
+                              <span className="text-[9px] uppercase tracking-wider text-stone-400 shrink-0">
+                                Presets:
+                              </span>
+                              {LUXURY_COLOR_PRESETS.map((preset) => (
+                                <button
+                                  key={preset.name}
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateColor(idx, {
+                                      name: preset.name,
+                                      hex: preset.hex,
+                                    })
+                                  }
+                                  className="px-1.5 py-0.5 bg-white dark:bg-black/30 border border-stone-200 dark:border-white/10 hover:border-stone-400 dark:hover:border-white/30 rounded text-[9px] text-stone-600 dark:text-stone-300 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                >
+                                  <span
+                                    style={{ backgroundColor: preset.hex }}
+                                    className="w-2 h-2 rounded-full border border-black/10 shrink-0"
+                                  />
+                                  <span>{preset.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Action Buttons */}

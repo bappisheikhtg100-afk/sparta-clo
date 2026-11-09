@@ -22,6 +22,7 @@ export interface ColorSwatch {
   name: string;
   hex: string;
   imageIndex?: number;
+  imageUrl?: string; // Direct image URL for this specific color variant
 }
 
 export interface Product {
@@ -37,6 +38,7 @@ export interface Product {
   hoverImageIndex?: number;
   hoverFit?: 'cover-top' | 'cover-center' | 'contain';
   colors?: ColorSwatch[];
+  colorImages?: Record<string, string>; // Mapping from colorway name to image URL
   category: Exclude<Category, 'All'>;
   sizes: string[];
   stock: StockStatus;
@@ -44,7 +46,7 @@ export interface Product {
   imageFit?: 'cover-top' | 'cover-center' | 'contain';
   canvasBg?: string;
   featuredOnHome?: boolean; // Control whether product appears in curated homepage section
-  sizeImages?: Record<string, string>; // Optional variant-specific image mapping for different sizes/volumes
+  sizeImages?: Record<string, string>; // Optional size-specific mapping retained for backwards compatibility
 }
 
 export interface CartItem {

@@ -32,14 +32,24 @@ export const ProductDetailView: React.FC = () => {
     setActiveImage(0);
     setQuantity(1);
     setValidationMsg(null);
-    setSelectedColor(selectedProduct.colors?.[0]?.name);
+    if (selectedProduct.colors && selectedProduct.colors.length > 0) {
+      const firstColor = selectedProduct.colors[0];
+      setSelectedColor(firstColor.name);
+      const targetImg =
+        firstColor.imageUrl ||
+        (selectedProduct.colorImages && selectedProduct.colorImages[firstColor.name]) ||
+        (firstColor.imageIndex !== undefined ? selectedProduct.images[firstColor.imageIndex] : undefined);
+      if (targetImg) {
+        const foundIdx = selectedProduct.images.indexOf(targetImg);
+        if (foundIdx !== -1) setActiveImage(foundIdx);
+      }
+    } else {
+      setSelectedColor(undefined);
+    }
+
     if (selectedProduct.sizes.length === 1) {
       const singleSize = selectedProduct.sizes[0];
       setSelectedSize(singleSize);
-      if (selectedProduct.sizeImages?.[singleSize]) {
-        const foundIdx = selectedProduct.images.indexOf(selectedProduct.sizeImages[singleSize]);
-        if (foundIdx !== -1) setActiveImage(foundIdx);
-      }
     } else {
       setSelectedSize('');
     }
@@ -75,11 +85,22 @@ export const ProductDetailView: React.FC = () => {
       ? 'object-cover object-top'
       : 'object-cover object-center';
 
-  const handleColorClick = (colorName: string, imageIndex?: number) => {
-    setSelectedColor(colorName);
+  const handleColorClick = (swatch: { name: string; hex: string; imageIndex?: number; imageUrl?: string }) => {
+    setSelectedColor(swatch.name);
     setValidationMsg(null);
-    if (imageIndex !== undefined && imageIndex < selectedProduct.images.length) {
-      setActiveImage(imageIndex);
+
+    const targetImg =
+      swatch.imageUrl ||
+      (selectedProduct.colorImages && selectedProduct.colorImages[swatch.name]) ||
+      (swatch.imageIndex !== undefined ? selectedProduct.images[swatch.imageIndex] : undefined);
+
+    if (targetImg) {
+      const foundIdx = selectedProduct.images.indexOf(targetImg);
+      if (foundIdx !== -1) {
+        setActiveImage(foundIdx);
+      }
+    } else if (swatch.imageIndex !== undefined && swatch.imageIndex < selectedProduct.images.length) {
+      setActiveImage(swatch.imageIndex);
     }
   };
 
@@ -294,7 +315,7 @@ export const ProductDetailView: React.FC = () => {
                       <button
                         key={swatch.name}
                         type="button"
-                        onClick={() => handleColorClick(swatch.name, swatch.imageIndex)}
+                        onClick={() => handleColorClick(swatch)}
                         className={`min-h-[44px] px-4 py-2 border text-xs font-medium inline-flex items-center gap-2.5 transition-colors cursor-pointer ${
                           isSelected
                             ? 'border-[#111111] bg-[#111111] text-[#FAF9F6] dark:border-[#F5F4F0] dark:bg-[#F5F4F0] dark:text-[#08080A]'

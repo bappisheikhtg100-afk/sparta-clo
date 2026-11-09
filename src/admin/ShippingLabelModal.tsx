@@ -19,8 +19,8 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleDownloadA4PDF = () => {
-    const printableData = orders.map((o) => {
+  const buildLabelData = () => {
+    return orders.map((o) => {
       const mockReceipt: any = {
         orderId: o.orderNumber,
         createdAt: o.createdAt,
@@ -39,11 +39,27 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({
       };
       return mapOrderToLabelData(mockReceipt, o.consignmentId);
     });
+  };
 
+  const handleDownloadA4PDF = () => {
+    const printableData = buildLabelData();
     const pdf = generateA4ShippingLabelsPDF(printableData);
     const dateStr = new Date().toISOString().slice(0, 10);
     pdf.save(`SPARTA-A4-Labels-${dateStr}.pdf`);
     setIsGenerated(true);
+    setTimeout(() => setIsGenerated(false), 3000);
+  };
+
+  const handleDirectPrint = () => {
+    const printableData = buildLabelData();
+    const pdf = generateA4ShippingLabelsPDF(printableData);
+    const blobUrl = pdf.output('bloburl');
+    const printWindow = window.open(blobUrl, '_blank');
+    if (printWindow) {
+      printWindow.focus();
+    }
+    setIsGenerated(true);
+    setTimeout(() => setIsGenerated(false), 3000);
   };
 
   const pagesCount = Math.ceil(orders.length / 6) || 1;
@@ -120,22 +136,40 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({
           </div>
         </div>
 
-        <div className="pt-4 border-t border-stone-200 dark:border-white/10 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 border border-stone-300 dark:border-white/15 text-stone-700 dark:text-stone-300 text-xs font-medium rounded-sm cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleDownloadA4PDF}
-            className="px-5 py-2 bg-[#111111] hover:bg-black dark:bg-white dark:hover:bg-stone-200 text-white dark:text-black text-xs font-medium rounded-sm inline-flex items-center gap-2 cursor-pointer transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Download A4 Printable PDF
-          </button>
+        <div className="pt-4 border-t border-stone-200 dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            {isGenerated && (
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium text-xs flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Labels generated successfully!
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-stone-300 dark:border-white/15 text-stone-700 dark:text-stone-300 text-xs font-medium rounded-sm cursor-pointer hover:bg-stone-50 dark:hover:bg-white/5 transition-colors"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={handleDirectPrint}
+              className="px-4 py-2 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-900 dark:text-white text-xs font-medium rounded-sm inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              Direct Print
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadA4PDF}
+              className="px-5 py-2 bg-[#111111] hover:bg-black dark:bg-white dark:hover:bg-stone-200 text-white dark:text-black text-xs font-medium rounded-sm inline-flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download A4 PDF
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -17,6 +17,7 @@ import {
 import {
   getStoredPathaoCredentials,
   savePathaoCredentials,
+  syncPathaoCredentialsFromSupabase,
   getPathaoAccessToken,
   fetchPathaoStores,
   PathaoCredentials,
@@ -63,6 +64,13 @@ export const CourierSettings: React.FC = () => {
     setInsideDhakaFee(String(storeSettings.insideDhakaFee || 70));
     setOutsideDhakaFee(String(storeSettings.outsideDhakaFee || 120));
     setFreeShippingThreshold(String(storeSettings.freeShippingThreshold || 5000));
+
+    // Multi-device sync: Load Pathao credentials from Supabase
+    syncPathaoCredentialsFromSupabase().then((synced) => {
+      if (synced && synced.clientId) {
+        setCreds(synced);
+      }
+    });
   }, [storeSettings]);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -90,24 +98,33 @@ export const CourierSettings: React.FC = () => {
 
     try {
       const token = await getPathaoAccessToken(creds, true);
-      setTestResult({
-        success: true,
-        message: `Successfully authenticated with Pathao! Token issued (valid for session).`,
-      });
+      let storeMsg = '';
 
       // Try fetching stores
       try {
         setIsFetchingStores(true);
         const storeList = await fetchPathaoStores(creds);
         setStores(storeList);
-        if (storeList.length > 0 && !creds.storeId) {
-          setCreds((prev: PathaoCredentials) => ({ ...prev, storeId: storeList[0].store_id }));
+        if (storeList.length > 0) {
+          const activeStore = storeList.find((s) => s.is_active === 1) || storeList[0];
+          const updatedCreds = {
+            ...creds,
+            storeId: activeStore.store_id,
+          };
+          setCreds(updatedCreds);
+          savePathaoCredentials(updatedCreds);
+          storeMsg = ` Connected Store: "${activeStore.store_name}" (Store ID: ${activeStore.store_id}). Pickup Address: ${activeStore.store_address}.`;
         }
-      } catch {
-        // ignore stores error
+      } catch (err: any) {
+        console.warn('Store fetch error:', err);
       } finally {
         setIsFetchingStores(false);
       }
+
+      setTestResult({
+        success: true,
+        message: `Successfully authenticated with Pathao!${storeMsg}`,
+      });
     } catch (err: any) {
       setTestResult({
         success: false,
@@ -151,10 +168,16 @@ export const CourierSettings: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setCreds({ ...PATHAO_PRODUCTION_DEFAULTS });
+                  const updated = {
+                    ...PATHAO_PRODUCTION_DEFAULTS,
+                    storeId: 500277,
+                    isSandbox: false,
+                  };
+                  setCreds(updated);
+                  savePathaoCredentials(updated);
                   setTestResult({
                     success: true,
-                    message: 'Your Live Pathao credentials loaded (Best Test Brand - Production mode). Click "Test Pathao Credentials" to verify.',
+                    message: 'Your Live Pathao credentials loaded (Best Test Brand - Store ID: 500277). Click "Test Pathao Credentials" to verify.',
                   });
                 }}
                 className="px-2.5 py-1 bg-stone-900 dark:bg-white text-white dark:text-black rounded text-[11px] font-medium transition-colors cursor-pointer"
@@ -165,10 +188,16 @@ export const CourierSettings: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setCreds({ ...PATHAO_SANDBOX_DEFAULTS });
+                  const updated = {
+                    ...PATHAO_SANDBOX_DEFAULTS,
+                    storeId: 11,
+                    isSandbox: true,
+                  };
+                  setCreds(updated);
+                  savePathaoCredentials(updated);
                   setTestResult({
                     success: true,
-                    message: 'Official Pathao Sandbox credentials loaded! Click "Test Pathao Credentials" to verify.',
+                    message: 'Official Pathao Sandbox credentials loaded (Demo Store ID: 11). Click "Test Pathao Credentials" to verify.',
                   });
                 }}
                 className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-700 dark:text-stone-300 rounded text-[11px] font-medium transition-colors cursor-pointer"
@@ -183,7 +212,16 @@ export const CourierSettings: React.FC = () => {
                 <input
                   type="checkbox"
                   checked={creds.isSandbox}
-                  onChange={(e) => setCreds({ ...creds, isSandbox: e.target.checked })}
+                  onChange={(e) => {
+                    const isSand = e.target.checked;
+                    const updated = {
+                      ...creds,
+                      isSandbox: isSand,
+                      storeId: isSand ? 11 : 500277,
+                    };
+                    setCreds(updated);
+                    savePathaoCredentials(updated);
+                  }}
                   className="rounded border-stone-300 cursor-pointer"
                 />
               </label>

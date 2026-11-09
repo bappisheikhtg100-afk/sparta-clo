@@ -186,6 +186,11 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
+  // Dispatched orders (orders with consignmentId or in processing/shipped status)
+  const dispatchedOrders = orders.filter(
+    (o) => !!o.consignmentId || o.status === 'processing' || o.status === 'shipped'
+  );
+
   return (
     <div className="space-y-6">
       {/* Header & Controls */}
@@ -198,7 +203,25 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
             Manage COD shipments, track Pathao consignments, and export shipping labels.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Option to Print All Dispatched Orders simultaneously */}
+          <button
+            type="button"
+            onClick={() => {
+              if (dispatchedOrders.length === 0) {
+                alert('No dispatched orders found yet. Dispatch orders to Pathao Courier first.');
+                return;
+              }
+              onOpenBulkLabels(dispatchedOrders);
+            }}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-sm inline-flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
+            title="Bulk print labels for all orders dispatched to Pathao"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print All Dispatched Labels ({dispatchedOrders.length})</span>
+          </button>
+
+          {/* Option to Print Selected Orders */}
           {selectedOrderIds.length > 0 && (
             <button
               type="button"
@@ -209,7 +232,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
               className="px-3.5 py-2 bg-[#111111] hover:bg-black dark:bg-white dark:hover:bg-stone-200 text-white dark:text-black text-xs font-medium rounded-sm inline-flex items-center gap-2 transition-colors cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
-              Print Selected Labels ({selectedOrderIds.length})
+              <span>Print Selected Labels ({selectedOrderIds.length})</span>
             </button>
           )}
         </div>
@@ -546,19 +569,31 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
                   </button>
 
                   {selectedOrder.consignmentId && (
-                    <button
-                      type="button"
-                      onClick={() => handleTrackPathao(selectedOrder.consignmentId!)}
-                      disabled={isTracking}
-                      className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-800 dark:text-stone-200 font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-colors"
-                    >
-                      {isTracking ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Truck className="w-3.5 h-3.5" />
-                      )}
-                      Check Live Status
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleTrackPathao(selectedOrder.consignmentId!)}
+                        disabled={isTracking}
+                        className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-800 dark:text-stone-200 font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-colors"
+                      >
+                        {isTracking ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Truck className="w-3.5 h-3.5" />
+                        )}
+                        Check Live Status
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePrintSingleLabel(selectedOrder)}
+                        className="px-3.5 py-2 bg-stone-900 hover:bg-black text-white dark:bg-white dark:text-black dark:hover:bg-stone-200 font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer transition-colors"
+                        title="Print Pathao Courier Shipping Sticker for this order"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Print Shipping Sticker
+                      </button>
+                    </>
                   )}
                 </div>
 

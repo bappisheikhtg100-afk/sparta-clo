@@ -179,12 +179,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (swatch.imageIndex !== undefined) {
-                        if (selectedSwatchIdx === swatch.imageIndex) {
+                      const targetImg =
+                        swatch.imageUrl ||
+                        (product.colorImages && product.colorImages[swatch.name]);
+                      let targetIdx = swatch.imageIndex;
+                      if (targetImg) {
+                        const found = product.images.indexOf(targetImg);
+                        if (found !== -1) targetIdx = found;
+                      }
+
+                      if (targetIdx !== undefined) {
+                        if (selectedSwatchIdx === targetIdx) {
                           setSelectedSwatchIdx(null);
                           setSelectedColorName(product.colors?.[0]?.name);
                         } else {
-                          setSelectedSwatchIdx(swatch.imageIndex);
+                          setSelectedSwatchIdx(targetIdx);
                           setSelectedColorName(swatch.name);
                         }
                       }

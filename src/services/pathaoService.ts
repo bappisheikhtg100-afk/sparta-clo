@@ -155,9 +155,43 @@ export function getStoredPathaoCredentials(): PathaoCredentials {
 export function savePathaoCredentials(creds: PathaoCredentials): void {
   try {
     localStorage.setItem(STORAGE_KEY_CREDS, JSON.stringify(creds));
+    // Asynchronously sync to Supabase store_settings so client credentials persist across all devices & sessions!
+    void (async () => {
+      try {
+        await supabase.from('store_settings').upsert({
+          setting_key: 'pathao_credentials',
+          setting_value: creds,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn('Supabase creds sync notice:', err);
+      }
+    })();
   } catch {
     // ignore
   }
+}
+
+/**
+ * Fetch and sync Pathao credentials from Supabase store_settings (multi-device support)
+ */
+export async function syncPathaoCredentialsFromSupabase(): Promise<PathaoCredentials> {
+  try {
+    const { data } = await supabase
+      .from('store_settings')
+      .select('setting_value')
+      .eq('setting_key', 'pathao_credentials')
+      .maybeSingle();
+
+    if (data?.setting_value && data.setting_value.clientId) {
+      const parsed = data.setting_value as PathaoCredentials;
+      localStorage.setItem(STORAGE_KEY_CREDS, JSON.stringify(parsed));
+      return parsed;
+    }
+  } catch (err) {
+    console.warn('Could not sync Pathao credentials from Supabase:', err);
+  }
+  return getStoredPathaoCredentials();
 }
 
 export function getBaseUrl(isSandbox?: boolean): string {
@@ -431,34 +465,54 @@ export async function fetchPathaoAreas(zoneId: number, customCreds?: PathaoCrede
 }
 
 /**
- * Calculate expected shipping fee from Pathao Price Plan
+ * Dynamically resolves a valid store ID for the current Pathao account and environment.
+ * Prevents "store_id: Wrong Store selected" error by querying the merchant's real store list.
  */
-export async function calculatePathaoPrice(params: {
-  storeId: number;
-  recipientCityId?: number;
-  recipientZoneId?: number;
-  itemWeightKg?: number;
-}): Promise<number> {
-  const creds = getStoredPathaoCredentials();
-  const token = await getPathaoAccessToken(creds);
+export async function resolvePathaoStoreId(
+  creds: PathaoCredentials,
+  requestedStoreId?: number
+): Promise<number> {
+  // If in sandbox mode, the valid sandbox demo store is always 11
+  if (creds.isSandbox) {
+    if (requestedStoreId && Number(requestedStoreId) === 11) return 11;
+    creds.storeId = 11;
+    savePathaoCredentials(creds);
+    return 11;
+  }
 
-  const json = await executePathaoCall<any>('/aladdin/api/v1/merchant/price-plan', {
-    method: 'POST',
-    creds,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: {
-      store_id: params.storeId,
-      item_type: 2, // Parcel
-      delivery_type: 48, // Standard delivery
-      item_weight: params.itemWeightKg || 0.5,
-      recipient_city: params.recipientCityId || 1,
-      recipient_zone: params.recipientZoneId || 1,
-    },
-  });
+  // In Live mode:
+  try {
+    const stores = await fetchPathaoStores(creds);
+    if (stores && stores.length > 0) {
+      // 1. Check if requested store ID is valid in the merchant's actual stores
+      if (requestedStoreId && requestedStoreId !== 11 && requestedStoreId !== 1) {
+        const matched = stores.find((s) => Number(s.store_id) === Number(requestedStoreId));
+        if (matched) {
+          return matched.store_id;
+        }
+      }
 
-  return json?.data?.final_price || json?.data?.price || 0;
+      // 2. Check if credentials store ID is valid
+      if (creds.storeId && creds.storeId !== 11 && creds.storeId !== 1) {
+        const matched = stores.find((s) => Number(s.store_id) === Number(creds.storeId));
+        if (matched) {
+          return matched.store_id;
+        }
+      }
+
+      // 3. Fallback to merchant's first active store
+      const activeStore = stores.find((s) => s.is_active === 1) || stores[0];
+      const selectedId = Number(activeStore.store_id);
+      creds.storeId = selectedId;
+      savePathaoCredentials(creds);
+      return selectedId;
+    }
+  } catch (err) {
+    console.warn('Could not query stores for dynamic resolution, using default:', err);
+  }
+
+  // Default known live store for Best Test Brand
+  return creds.isSandbox ? 11 : 500277;
 }
 
 /**
@@ -469,17 +523,14 @@ async function buildCompliantOrderBody(
   payload: PathaoCreateOrderPayload,
   creds: PathaoCredentials
 ): Promise<Record<string, any>> {
-  // Resolve store ID strictly
-  let storeId = payload.store_id || creds.storeId;
-  if (!storeId || storeId === 1) {
-    storeId = 500277; // User's live registered store Best Test Brand
-  }
+  // Dynamically resolve valid store ID for current environment
+  const storeId = await resolvePathaoStoreId(creds, payload.store_id);
 
   // Ensure recipient phone is normalized 11-digit
   const phone = normalizeBangladeshPhone(payload.recipient_phone);
 
   // Address validation (10 to 220 chars)
-  let address = payload.recipient_address.trim();
+  let address = (payload.recipient_address || '').trim();
   if (address.length < 10) {
     address = `${address}, Bangladesh`;
   }
@@ -488,7 +539,7 @@ async function buildCompliantOrderBody(
   }
 
   // Name validation (3 to 100 chars)
-  let name = payload.recipient_name.trim();
+  let name = (payload.recipient_name || 'Customer').trim();
   if (name.length < 3) {
     name = `${name} Client`;
   }
