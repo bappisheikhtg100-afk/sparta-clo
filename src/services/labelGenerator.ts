@@ -31,7 +31,7 @@ export function mapOrderToLabelData(order: OrderReceipt, consignmentId?: string)
 
   return {
     orderId: order.orderId,
-    consignmentId: consignmentId || `SPT-${order.orderId.replace(/[^0-9]/g, '') || '883921'}`,
+    consignmentId: consignmentId || order.orderId,
     courierName: 'PATHAO COURIER',
     createdAt: new Date(order.createdAt).toLocaleDateString('en-GB', {
       day: '2-digit',
@@ -102,55 +102,71 @@ function drawSingleLabel(
   doc.roundedRect(x, y, w, h, 2, 2, 'S');
 
   // Header Bar (Brand & Courier)
-  doc.setFillColor(20, 20, 22);
-  doc.rect(x, y, w, 11, 'F');
+  doc.setFillColor(10, 10, 12);
+  doc.rect(x, y, w, 12, 'F');
 
-  // Header Brand Name
+  // Header Brand Name (Large bold SPARTA)
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(10);
-  doc.text('SPARTA ATELIER', x + 4, y + 7.5);
+  doc.setFontSize(13);
+  doc.text('SPARTA', x + 5, y + 8.5);
+
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(200, 200, 200);
+  doc.text('LUXURY ATELIER', x + 34, y + 8.5);
 
   // Courier Badge
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  doc.text(label.courierName || 'PATHAO COURIER', x + w - 4, y + 7.5, { align: 'right' });
+  doc.setTextColor(255, 255, 255);
+  doc.text(label.courierName || 'PATHAO COURIER', x + w - 5, y + 8.5, { align: 'right' });
 
   // Subheader: Order & Tracking IDs
-  const subY = y + 15;
-  doc.setTextColor(30, 30, 30);
-  doc.setFontSize(7);
+  const subY = y + 16.5;
+  doc.setTextColor(40, 40, 40);
+  doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
-  doc.text('ORDER REF:', x + 4, subY);
+  doc.text('ORDER REF:', x + 5, subY);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.text(label.orderId, x + 22, subY);
+  doc.setFontSize(9.5);
+  doc.text(label.orderId, x + 24, subY);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
+  doc.setFontSize(7.5);
   doc.text('DATE:', x + w - 34, subY);
   doc.setFont('helvetica', 'bold');
-  doc.text(label.createdAt, x + w - 4, subY, { align: 'right' });
+  doc.text(label.createdAt, x + w - 5, subY, { align: 'right' });
 
   // Divider
   doc.setDrawColor(210, 210, 210);
   doc.setLineWidth(0.2);
-  doc.line(x + 4, subY + 2.5, x + w - 4, subY + 2.5);
+  doc.line(x + 5, subY + 2.5, x + w - 5, subY + 2.5);
 
-  // Consignment Code Box
-  const codeBoxY = subY + 5;
-  doc.setFillColor(245, 245, 247);
-  doc.roundedRect(x + 4, codeBoxY, w - 8, 9, 1, 1, 'F');
+  // BIG PROMINENT PATHAO CONSIGNMENT ID BOX
+  const codeBoxY = subY + 4.5;
+  doc.setFillColor(242, 244, 248);
+  doc.setDrawColor(30, 30, 30);
+  doc.setLineWidth(0.35);
+  doc.roundedRect(x + 4, codeBoxY, w - 8, 12, 1, 1, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 100, 110);
+  doc.text('PATHAO CONSIGNMENT / TRACKING ID', x + w / 2, codeBoxY + 3.8, {
+    align: 'center',
+  });
+
   doc.setFont('courier', 'bold');
-  doc.setFontSize(10);
+  doc.setFontSize(13);
   doc.setTextColor(10, 10, 10);
-  doc.text(`TRACKING: ${label.consignmentId || label.orderId}`, x + w / 2, codeBoxY + 6, {
+  doc.text(label.consignmentId || label.orderId, x + w / 2, codeBoxY + 9.5, {
     align: 'center',
   });
 
   // Customer Recipient Information
-  let curY = codeBoxY + 13;
+  let curY = codeBoxY + 15.5;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(110, 110, 115);

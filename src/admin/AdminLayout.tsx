@@ -61,6 +61,18 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
   useEffect(() => {
     loadData();
+    const handleRefresh = () => {
+      loadData();
+    };
+    window.addEventListener('sparta_orders_updated', handleRefresh);
+    window.addEventListener('sparta_products_updated', handleRefresh);
+    const interval = setInterval(loadData, 12000); // 12-second live sync
+
+    return () => {
+      window.removeEventListener('sparta_orders_updated', handleRefresh);
+      window.removeEventListener('sparta_products_updated', handleRefresh);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleOpenBulkLabels = (pickedOrders?: AdminOrder[]) => {

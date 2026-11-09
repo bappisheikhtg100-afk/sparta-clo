@@ -469,17 +469,10 @@ async function buildCompliantOrderBody(
   payload: PathaoCreateOrderPayload,
   creds: PathaoCredentials
 ): Promise<Record<string, any>> {
-  // Resolve store ID
+  // Resolve store ID strictly
   let storeId = payload.store_id || creds.storeId;
-  if (!storeId || storeId === 0) {
-    try {
-      const storeList = await fetchPathaoStores(creds);
-      if (storeList.length > 0) {
-        storeId = storeList[0].store_id;
-      }
-    } catch {
-      // ignore
-    }
+  if (!storeId || storeId === 1) {
+    storeId = 500277; // User's live registered store Best Test Brand
   }
 
   // Ensure recipient phone is normalized 11-digit
@@ -504,35 +497,29 @@ async function buildCompliantOrderBody(
   }
 
   const body: Record<string, any> = {
-    store_id: storeId || 1,
+    store_id: storeId,
     merchant_order_id: payload.merchant_order_id,
     recipient_name: name,
     recipient_phone: phone,
     recipient_address: address,
+    recipient_city: payload.recipient_city || 1,
+    recipient_zone: payload.recipient_zone || 1,
     delivery_type: payload.delivery_type || 48,
     item_type: payload.item_type || 2,
     item_quantity: Math.max(1, payload.item_quantity || 1),
     item_weight: Math.max(0.5, Math.min(10, Number(payload.item_weight) || 0.5)),
     amount_to_collect: Math.round(Number(payload.amount_to_collect) || 0),
-    item_description: payload.item_description || 'SPARTA Atelier Collection Pieces',
+    item_description: payload.item_description || 'SPARTA Luxury Apparel Piece',
   };
 
+  if (payload.recipient_area && payload.recipient_area > 0) {
+    body.recipient_area = payload.recipient_area;
+  }
   if (payload.recipient_secondary_phone) {
     body.recipient_secondary_phone = normalizeBangladeshPhone(payload.recipient_secondary_phone);
   }
   if (payload.special_instruction) {
     body.special_instruction = payload.special_instruction;
-  }
-
-  // Auto-address feature: Only include city/zone/area if explicitly valid integers > 0
-  if (payload.recipient_city && payload.recipient_city > 0) {
-    body.recipient_city = payload.recipient_city;
-  }
-  if (payload.recipient_zone && payload.recipient_zone > 0) {
-    body.recipient_zone = payload.recipient_zone;
-  }
-  if (payload.recipient_area && payload.recipient_area > 0) {
-    body.recipient_area = payload.recipient_area;
   }
 
   return body;
@@ -559,12 +546,23 @@ export async function createPathaoOrder(
     body,
   });
 
-  const data = json?.data || {};
+  const data = json?.data;
+
+  // Strict validation: must have genuine consignment_id from Pathao
+  if (!data?.consignment_id) {
+    let errorDetail = json?.message || 'Pathao gateway rejected parcel creation.';
+    if (json?.errors) {
+      errorDetail = Object.entries(json.errors)
+        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+        .join(' | ');
+    }
+    throw new Error(`Pathao booking failed: ${errorDetail}`);
+  }
 
   return {
-    consignment_id: data.consignment_id || `PTH-${Date.now()}`,
+    consignment_id: data.consignment_id,
     merchant_order_id: payload.merchant_order_id,
-    order_status: data.order_status || 'Pending',
+    order_status: data.order_status || 'Pending Dispatch',
     delivery_fee: Number(data.delivery_fee) || 0,
   };
 }

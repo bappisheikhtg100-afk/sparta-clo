@@ -28,7 +28,7 @@ export interface AdminOrder {
   items: CartItem[];
 }
 
-const LOCAL_ORDERS_KEY = 'sparta_admin_orders_v2';
+const LOCAL_ORDERS_KEY = 'sparta_admin_orders_v3';
 
 function getStoredOrders(): AdminOrder[] {
   try {
@@ -75,55 +75,84 @@ export async function createOrderRecord(
     items: receipt.items,
   };
 
-  // 1. Save in local cache first for instant feedback
+  // 1. Save in local cache first
   const existing = getStoredOrders();
-  saveStoredOrders([adminOrder, ...existing]);
+  saveStoredOrders([adminOrder, ...existing.filter((o) => o.orderNumber !== receipt.orderId)]);
 
-  // 2. Persist to Supabase orders & order_items
+  // Notify active windows/tabs
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('sparta_orders_updated'));
+  }
+
+  // 2. Persist to Supabase Database
   try {
-    const { data: orderData, error: orderErr } = await supabase
-      .from('orders')
-      .insert({
-        order_number: receipt.orderId,
-        customer_name: shipping.fullName,
-        customer_phone: shipping.phone,
-        shipping_address: fullAddress,
-        delivery_zone: shipping.deliveryZone,
-        subtotal: receipt.subtotal,
-        delivery_fee: receipt.deliveryFee,
-        total: receipt.total,
-        payment_method: 'Cash on Delivery',
-        status: 'pending',
-        notes: shipping.notes || null,
-      })
-      .select('id')
-      .single();
+    // Attempt 1: Atomic RPC function
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('create_public_checkout_order', {
+      p_order_number: receipt.orderId,
+      p_customer_name: shipping.fullName,
+      p_customer_phone: shipping.phone,
+      p_shipping_address: fullAddress,
+      p_delivery_zone: shipping.deliveryZone,
+      p_subtotal: receipt.subtotal,
+      p_delivery_fee: receipt.deliveryFee,
+      p_total: receipt.total,
+      p_notes: shipping.notes || null,
+      p_items: receipt.items.map((it) => ({
+        productId: it.productId,
+        name: it.name,
+        size: it.size,
+        color: it.color || null,
+        price: it.price,
+        quantity: it.quantity,
+      })),
+    });
 
-    if (!orderErr && orderData?.id) {
-      // Insert order items
-      const itemsToInsert = receipt.items.map((item) => ({
-        order_id: orderData.id,
-        product_id: item.productId,
-        product_name: item.name,
-        size: item.size,
-        color: item.color || null,
-        unit_price: item.price,
-        quantity: item.quantity,
-        total_price: item.price * item.quantity,
-      }));
+    if (rpcErr || (rpcData && !rpcData.success)) {
+      // Attempt 2: Direct Table Insert
+      const { data: orderData, error: orderErr } = await supabase
+        .from('orders')
+        .insert({
+          order_number: receipt.orderId,
+          customer_name: shipping.fullName,
+          customer_phone: shipping.phone,
+          shipping_address: fullAddress,
+          delivery_zone: shipping.deliveryZone,
+          subtotal: receipt.subtotal,
+          delivery_fee: receipt.deliveryFee,
+          total: receipt.total,
+          payment_method: 'Cash on Delivery',
+          status: 'pending',
+          notes: shipping.notes || null,
+        })
+        .select('id')
+        .single();
 
-      await supabase.from('order_items').insert(itemsToInsert);
+      if (!orderErr && orderData?.id) {
+        const itemsToInsert = receipt.items.map((item) => ({
+          order_id: orderData.id,
+          product_id: item.productId,
+          product_name: item.name,
+          size: item.size,
+          color: item.color || null,
+          unit_price: item.price,
+          quantity: item.quantity,
+          total_price: item.price * item.quantity,
+        }));
 
-      // Upsert customer profile
-      await supabase.from('customers').upsert({
-        phone: shipping.phone,
-        full_name: shipping.fullName,
-        address: fullAddress,
-        delivery_zone: shipping.deliveryZone,
-      });
+        await supabase.from('order_items').insert(itemsToInsert);
+
+        await supabase.from('customers').upsert({
+          phone: shipping.phone,
+          full_name: shipping.fullName,
+          address: fullAddress,
+          delivery_zone: shipping.deliveryZone,
+        });
+      } else if (orderErr) {
+        console.error('Failed to insert order into Supabase:', orderErr);
+      }
     }
   } catch (err) {
-    console.warn('Supabase order creation exception:', err);
+    console.error('Supabase order creation exception:', err);
   }
 
   return receipt.orderId;
@@ -142,7 +171,7 @@ export async function fetchAllOrders(): Promise<AdminOrder[]> {
       `)
       .order('created_at', { ascending: false });
 
-    if (!error && data && data.length > 0) {
+    if (!error && Array.isArray(data)) {
       const mapped: AdminOrder[] = data.map((row: any) => ({
         id: row.id,
         orderNumber: row.order_number || row.id,
@@ -173,8 +202,13 @@ export async function fetchAllOrders(): Promise<AdminOrder[]> {
         })),
       }));
 
-      saveStoredOrders(mapped);
-      return mapped;
+      // Merge local cache if any local orders were created in this browser
+      const stored = getStoredOrders();
+      const dbIds = new Set(mapped.map((m) => m.orderNumber));
+      const unsynced = stored.filter((s) => !dbIds.has(s.orderNumber));
+      const combined = [...unsynced, ...mapped];
+      saveStoredOrders(combined);
+      return combined;
     }
   } catch {
     // fallback to stored orders
@@ -195,6 +229,10 @@ export async function updateOrderStatus(
   const updated = orders.map((o) => (o.id === orderId || o.orderNumber === orderId ? { ...o, ...updates } : o));
   saveStoredOrders(updated);
 
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('sparta_orders_updated'));
+  }
+
   // Update Supabase
   try {
     const dbPayload: any = {};
@@ -203,13 +241,17 @@ export async function updateOrderStatus(
     if (updates.consignmentId) dbPayload.consignment_id = updates.consignmentId;
     if (updates.courierStatus) dbPayload.courier_status = updates.courierStatus;
     if (updates.courierName) dbPayload.courier_name = updates.courierName;
-    if (updates.internalNotes !== undefined) dbPayload.internal_notes = updates.internalNotes;
+    if (updates.internalNotes) dbPayload.internal_notes = updates.internalNotes;
+    dbPayload.updated_at = new Date().toISOString();
 
-    await supabase
-      .from('orders')
-      .update(dbPayload)
-      .or(`id.eq.${orderId},order_number.eq.${orderId}`);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(orderId);
+
+    if (isUuid) {
+      await supabase.from('orders').update(dbPayload).eq('id', orderId);
+    } else {
+      await supabase.from('orders').update(dbPayload).eq('order_number', orderId);
+    }
   } catch (err) {
-    console.warn('Failed to sync order update to Supabase:', err);
+    console.warn('Could not update order in Supabase:', err);
   }
 }
