@@ -16,14 +16,20 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({
   onClose,
 }) => {
   const [isGenerated, setIsGenerated] = useState(false);
+  const [courierStyle, setCourierStyle] = useState<'auto' | 'carrybee' | 'pathao'>('auto');
 
   if (!isOpen) return null;
 
   const buildLabelData = () => {
     return orders.map((o) => {
+      let courier = o.courierName;
+      if (courierStyle === 'carrybee') courier = 'Carrybee Courier';
+      if (courierStyle === 'pathao') courier = 'Pathao Courier';
+
       const mockReceipt: any = {
         orderId: o.orderNumber,
         createdAt: o.createdAt,
+        courierName: courier,
         customer: {
           fullName: o.customerName,
           phone: o.customerPhone,
@@ -37,7 +43,7 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({
         items: o.items,
         total: o.total,
       };
-      return mapOrderToLabelData(mockReceipt, o.consignmentId);
+      return mapOrderToLabelData(mockReceipt, o.consignmentId, courier);
     });
   };
 
@@ -45,7 +51,8 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({
     const printableData = buildLabelData();
     const pdf = generateA4ShippingLabelsPDF(printableData);
     const dateStr = new Date().toISOString().slice(0, 10);
-    pdf.save(`SPARTA-A4-Labels-${dateStr}.pdf`);
+    const tag = courierStyle === 'carrybee' ? 'Carrybee' : courierStyle === 'pathao' ? 'Pathao' : 'Courier';
+    pdf.save(`SPARTA-${tag}-Labels-${dateStr}.pdf`);
     setIsGenerated(true);
     setTimeout(() => setIsGenerated(false), 3000);
   };
@@ -83,7 +90,56 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({
           </button>
         </div>
 
-        <div className="py-5 space-y-4">
+        {/* Courier Format Selector */}
+        <div className="mt-4 p-3 bg-stone-50 dark:bg-white/[0.03] border border-stone-200 dark:border-white/10 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <span className="text-[11px] font-semibold text-stone-800 dark:text-stone-200 block">
+              Sticker Format Style
+            </span>
+            <span className="text-[10px] text-stone-400">
+              Select which courier branding &amp; AWB format to print
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setCourierStyle('auto')}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer ${
+                courierStyle === 'auto'
+                  ? 'bg-stone-900 text-white dark:bg-white dark:text-black shadow-xs'
+                  : 'text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-white/10'
+              }`}
+            >
+              Auto (Per Order)
+            </button>
+            <button
+              type="button"
+              onClick={() => setCourierStyle('carrybee')}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer flex items-center gap-1.5 ${
+                courierStyle === 'carrybee'
+                  ? 'bg-amber-600 text-white shadow-xs font-semibold'
+                  : 'text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 hover:bg-amber-100'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+              Carrybee Sticker
+            </button>
+            <button
+              type="button"
+              onClick={() => setCourierStyle('pathao')}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer flex items-center gap-1.5 ${
+                courierStyle === 'pathao'
+                  ? 'bg-blue-600 text-white shadow-xs font-semibold'
+                  : 'text-blue-800 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40 hover:bg-blue-100'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+              Pathao Sticker
+            </button>
+          </div>
+        </div>
+
+        <div className="py-4 space-y-4">
           <div className="p-4 bg-stone-50 dark:bg-white/[0.02] border border-stone-200 dark:border-white/10 rounded">
             <div className="grid grid-cols-2 gap-4 text-center">
               <div>

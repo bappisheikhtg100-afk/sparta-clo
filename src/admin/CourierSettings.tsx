@@ -180,6 +180,32 @@ export const CourierSettings: React.FC = () => {
         setCarrybeeCreds(updated);
         saveCarrybeeCredentials(updated);
         storeMsg = ` Connected Store: "${activeStore.name}" (Store ID: ${activeStore.id}). Address: ${activeStore.address}.`;
+      } else {
+        // If client's merchant account has zero stores, auto-provision their primary store
+        try {
+          const { createCarrybeeStore } = await import('../services/carrybeeService');
+          const newStore = await createCarrybeeStore(
+            {
+              name: 'SPARTA Atelier',
+              contact_person_name: 'Store Manager',
+              contact_person_number: '01700000000',
+              address: 'House 12, Road 5, Dhanmondi, Dhaka',
+              city_id: 14,
+              zone_id: 50,
+              area_id: 1643,
+            },
+            carrybeeCreds
+          );
+          if (newStore?.id) {
+            const updated = { ...carrybeeCreds, storeId: String(newStore.id) };
+            setCarrybeeCreds(updated);
+            saveCarrybeeCredentials(updated);
+            setCarrybeeStores([newStore]);
+            storeMsg = ` Auto-created Primary Pickup Store: "${newStore.name}" (Store ID: ${newStore.id}).`;
+          }
+        } catch (storeCreateErr) {
+          console.warn('Auto store creation notice:', storeCreateErr);
+        }
       }
 
       setCarrybeeTestResult({

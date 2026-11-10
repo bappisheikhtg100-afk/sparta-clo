@@ -88,6 +88,7 @@ export const CARRYBEE_PRODUCTION_DEFAULTS: CarrybeeCredentials = {
   clientId: 'ae2fce67-a7b6-4749-82ff-7735c6240276',
   clientSecret: '1164e314-3dc5-461c-8abf-701b7916c360',
   clientContext: 'MJh6nyloHRUQemOjrJSYwEbdaLFTuX',
+  storeId: '33023',
   isSandbox: false,
 };
 
@@ -95,6 +96,7 @@ export const CARRYBEE_SANDBOX_DEFAULTS: CarrybeeCredentials = {
   clientId: '1a89c1a6-fc68-4395-9c09-628e0d3eaafc',
   clientSecret: '1d7152c9-5b2d-4e4e-9c20-652b93333704',
   clientContext: 'DzJwPsx31WaTbS745XZoBjmQLcNqwK',
+  storeId: '33023',
   isSandbox: true,
 };
 
@@ -103,6 +105,11 @@ export function getStoredCarrybeeCredentials(): CarrybeeCredentials {
     const raw = localStorage.getItem(STORAGE_KEY_CARRYBEE_CREDS);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Auto-upgrade invalid or legacy storeId '1' to active store 33023
+      if (!parsed.storeId || parsed.storeId === '1' || parsed.storeId === 1) {
+        parsed.storeId = '33023';
+        localStorage.setItem(STORAGE_KEY_CARRYBEE_CREDS, JSON.stringify({ ...CARRYBEE_PRODUCTION_DEFAULTS, ...parsed }));
+      }
       return {
         ...CARRYBEE_PRODUCTION_DEFAULTS,
         ...parsed,
@@ -251,7 +258,43 @@ export async function fetchCarrybeeStores(customCreds?: CarrybeeCredentials): Pr
 }
 
 /**
- * Dynamically resolves a valid store ID for Carrybee merchant
+ * Automatically create a default pickup store on Carrybee if merchant has 0 stores registered
+ * Endpoint: POST /api/v2/stores
+ */
+export async function createCarrybeeStore(
+  storeData: {
+    name: string;
+    contact_person_name: string;
+    contact_person_number: string;
+    address: string;
+    city_id: number;
+    zone_id: number;
+    area_id: number;
+  },
+  customCreds?: CarrybeeCredentials
+): Promise<CarrybeeStore | null> {
+  const creds = customCreds || getStoredCarrybeeCredentials();
+  try {
+    const res = await executeCarrybeeCall<any>('/api/v2/stores', {
+      method: 'POST',
+      creds,
+      body: storeData,
+    });
+    // Re-fetch stores after creation
+    const stores = await fetchCarrybeeStores(creds);
+    if (stores && stores.length > 0) {
+      return stores[stores.length - 1];
+    }
+  } catch (err) {
+    console.warn('Failed to auto-create Carrybee store:', err);
+  }
+  return null;
+}
+
+/**
+ * Dynamically resolves a valid store ID for Carrybee merchant.
+ * If the merchant has existing stores, it selects the active store.
+ * If the merchant has 0 stores (new account), it automatically provisions their primary store!
  */
 export async function resolveCarrybeeStoreId(
   creds: CarrybeeCredentials,
@@ -261,10 +304,7 @@ export async function resolveCarrybeeStoreId(
     return requestedStoreId.trim();
   }
 
-  if (creds.storeId && creds.storeId.trim()) {
-    return creds.storeId.trim();
-  }
-
+  // 1. Check if merchant has existing stores in their Carrybee account
   try {
     const stores = await fetchCarrybeeStores(creds);
     if (stores && stores.length > 0) {
@@ -274,11 +314,36 @@ export async function resolveCarrybeeStoreId(
       saveCarrybeeCredentials(creds);
       return validId;
     }
+
+    // 2. If client account has 0 stores registered, automatically create their primary pickup store!
+    const newStore = await createCarrybeeStore(
+      {
+        name: 'SPARTA Atelier',
+        contact_person_name: 'Store Manager',
+        contact_person_number: '01700000000',
+        address: 'House 12, Road 5, Dhanmondi, Dhaka',
+        city_id: 14, // Dhaka
+        zone_id: 50, // Dhanmondi
+        area_id: 1643, // Dhanmondi 1
+      },
+      creds
+    );
+
+    if (newStore?.id) {
+      const validId = String(newStore.id);
+      creds.storeId = validId;
+      saveCarrybeeCredentials(creds);
+      return validId;
+    }
   } catch (err) {
-    console.warn('Could not auto-fetch Carrybee stores:', err);
+    console.warn('Could not auto-fetch or auto-provision Carrybee stores:', err);
   }
 
-  return '1';
+  if (creds.storeId && creds.storeId.trim()) {
+    return creds.storeId.trim();
+  }
+
+  return '33023';
 }
 
 /**

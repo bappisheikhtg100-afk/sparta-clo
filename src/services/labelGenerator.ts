@@ -33,17 +33,28 @@ export function mapOrderToLabelData(
 
   const totalQty = order.items.reduce((acc, it) => acc + it.quantity, 0);
 
-  const determinedCourier =
-    courierName ||
-    order.courierName ||
-    ((consignmentId && (consignmentId.startsWith('CB') || consignmentId.startsWith('FX')))
-      ? 'CARRYBEE COURIER'
-      : 'PATHAO COURIER');
+  const rawCourier = (courierName || order.courierName || '').toLowerCase();
+  const cid = (consignmentId || '').trim();
+
+  let isCarrybee =
+    rawCourier.includes('carrybee') ||
+    cid.startsWith('CB') ||
+    cid.startsWith('FX') ||
+    cid.startsWith('F1') ||
+    cid.startsWith('F2') ||
+    (cid.startsWith('F') && cid.length >= 8); // Carrybee official AWB format e.g. F111044WZ5G
+
+  // If explicitly designated Pathao
+  if (rawCourier.includes('pathao')) {
+    isCarrybee = false;
+  }
+
+  const determinedCourier = isCarrybee ? 'CARRYBEE COURIER' : 'PATHAO COURIER';
 
   return {
     orderId: order.orderId,
     consignmentId: consignmentId || order.orderId,
-    courierName: determinedCourier.toUpperCase(),
+    courierName: determinedCourier,
     createdAt: new Date(order.createdAt).toLocaleDateString('en-GB', {
       day: '2-digit',
       month: 'short',

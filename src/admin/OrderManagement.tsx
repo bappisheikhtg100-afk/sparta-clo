@@ -106,11 +106,12 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
-  const handlePrintSingleLabel = (order: AdminOrder) => {
+  const handlePrintSingleLabel = (order: AdminOrder, forcedCourier?: string) => {
+    const courier = forcedCourier || order.courierName || 'Pathao Courier';
     const mockReceipt: any = {
       orderId: order.orderNumber,
       createdAt: order.createdAt,
-      courierName: order.courierName,
+      courierName: courier,
       customer: {
         fullName: order.customerName,
         phone: order.customerPhone,
@@ -124,9 +125,9 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
       items: order.items,
       total: order.total,
     };
-    const labelData = mapOrderToLabelData(mockReceipt, order.consignmentId, order.courierName);
+    const labelData = mapOrderToLabelData(mockReceipt, order.consignmentId, courier);
     const pdf = generateA4ShippingLabelsPDF([labelData]);
-    const courierTag = (order.courierName || 'LABEL').replace(/\s+/g, '-');
+    const courierTag = courier.toLowerCase().includes('carrybee') ? 'CARRYBEE' : 'PATHAO';
     pdf.save(`SPARTA-${courierTag}-${order.orderNumber}.pdf`);
   };
 
@@ -192,18 +193,18 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     try {
       const creds = getStoredCarrybeeCredentials();
       const result = await createCarrybeeOrder({
-        store_id: creds.storeId,
+        store_id: creds.storeId || '33023',
         merchant_order_id: order.orderNumber,
         recipient_name: order.customerName,
         recipient_phone: order.customerPhone,
         recipient_address: order.shippingAddress,
         delivery_type: 1, // normal
-        item_type: 2, // parcel
+        product_type: 1, // 1=Parcel (as per Carrybee API documentation)
         item_quantity: Math.max(1, order.items.reduce((acc, it) => acc + it.quantity, 0)),
         item_weight: 500, // grams
         amount_to_collect: order.total,
-        item_description: order.items.map((it) => it.name).join(', ') || 'SPARTA Garments',
-        special_instruction: order.internalNotes || 'Handle with care - Luxury garments',
+        product_description: order.items.map((it) => it.name).join(', ') || 'SPARTA Luxury Apparel',
+        special_instruction: order.internalNotes || 'Fragile luxury apparel - Handle with care',
       });
 
       await updateOrderStatus(order.id, {
@@ -624,14 +625,27 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
                     <option value="cancelled">Cancelled</option>
                   </select>
 
-                  <button
-                    type="button"
-                    onClick={() => handlePrintSingleLabel(selectedOrder)}
-                    className="px-3 py-1.5 bg-stone-200 hover:bg-stone-300 dark:bg-white/10 dark:hover:bg-white/20 text-stone-900 dark:text-white text-xs font-medium rounded inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    Print Sticker
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handlePrintSingleLabel(selectedOrder, 'Carrybee Courier')}
+                      className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-medium rounded inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                      title="Print Carrybee Courier Amber Shipping Sticker"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      Carrybee Sticker
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePrintSingleLabel(selectedOrder, 'Pathao Courier')}
+                      className="px-2.5 py-1.5 bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-medium rounded inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                      title="Print Pathao Courier Crimson Shipping Sticker"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      Pathao Sticker
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -761,7 +775,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
 
                         <button
                           type="button"
-                          onClick={() => handlePrintSingleLabel(selectedOrder)}
+                          onClick={() => handlePrintSingleLabel(selectedOrder, 'Carrybee Courier')}
                           className="px-3.5 py-2 bg-amber-900 hover:bg-black text-white font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
                           title="Print Carrybee Courier signature shipping sticker"
                         >
@@ -846,7 +860,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
 
                         <button
                           type="button"
-                          onClick={() => handlePrintSingleLabel(selectedOrder)}
+                          onClick={() => handlePrintSingleLabel(selectedOrder, 'Pathao Courier')}
                           className="px-3.5 py-2 bg-stone-900 hover:bg-black text-white dark:bg-white dark:text-black dark:hover:bg-stone-200 font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
                           title="Print Pathao Courier Shipping Sticker for this order"
                         >
