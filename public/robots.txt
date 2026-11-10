@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://bappisheikhtg100-afk.github.io/sparta-clo/sitemap.xml

@@ -441,16 +441,26 @@ export const ProductDetailView: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <div>
+              <div className="space-y-3">
                 <button
                   type="button"
                   disabled
-                  className="w-full min-h-[50px] px-6 py-3 bg-stone-200 dark:bg-zinc-900 text-stone-500 dark:text-zinc-500 text-xs sm:text-sm font-medium cursor-not-allowed border border-stone-300/60 dark:border-zinc-800"
+                  className="w-full min-h-[50px] px-6 py-3 bg-stone-100 dark:bg-zinc-900 text-stone-800 dark:text-zinc-200 text-xs sm:text-sm font-semibold tracking-wider uppercase cursor-not-allowed border border-stone-300 dark:border-zinc-800 shadow-xs flex items-center justify-center gap-2"
                 >
-                  {selectedProduct.stock === 'out-of-stock'
-                    ? 'Archive Piece · Sold Out'
-                    : 'Releasing Soon'}
+                  {selectedProduct.stock === 'coming-soon' ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                      <span>Coming Soon · Upcoming Atelier Release</span>
+                    </>
+                  ) : (
+                    <span>Archive Piece · Sold Out</span>
+                  )}
                 </button>
+                {selectedProduct.stock === 'coming-soon' && (
+                  <p className="text-[11px] text-center text-stone-500 dark:text-zinc-400">
+                    This limited edition piece is currently in development at our Dhaka atelier. Expected release date will be announced soon.
+                  </p>
+                )}
               </div>
             )}
 

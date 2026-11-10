@@ -106,7 +106,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return null;
   });
 
-  const [products, setProducts] = useState<Product[]>(getLocalStoredProducts);
+  const sortByOrder = (list: Product[]) =>
+    [...list].sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+
+  const [products, setProducts] = useState<Product[]>(() =>
+    sortByOrder(getLocalStoredProducts())
+  );
   const [currentRoute, setCurrentRoute] = useState<RouteView>(() => {
     if (typeof window !== 'undefined' && window.location.hash === '#admin') {
       return 'admin';
@@ -135,9 +140,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const refreshProducts = useCallback(async () => {
     try {
       const live = await fetchPublishedProducts();
-      setProducts(live);
+      setProducts(sortByOrder(live));
     } catch {
-      setProducts(getLocalStoredProducts());
+      setProducts(sortByOrder(getLocalStoredProducts()));
     }
   }, []);
 
@@ -163,7 +168,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     const handleProductsUpdated = (e: any) => {
       const updatedList = e.detail || getLocalStoredProducts();
-      setProducts(updatedList);
+      setProducts(sortByOrder(updatedList));
     };
     window.addEventListener('sparta_products_updated', handleProductsUpdated);
     return () => window.removeEventListener('sparta_products_updated', handleProductsUpdated);

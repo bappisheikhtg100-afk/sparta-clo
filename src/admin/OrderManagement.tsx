@@ -22,6 +22,12 @@ import {
   trackPathaoOrder,
   PathaoTrackingInfo,
 } from '../services/pathaoService';
+import {
+  createCarrybeeOrder,
+  trackCarrybeeOrder,
+  CarrybeeTrackingInfo,
+  getStoredCarrybeeCredentials,
+} from '../services/carrybeeService';
 import { generateA4ShippingLabelsPDF, mapOrderToLabelData } from '../services/labelGenerator';
 import { formatBDT } from '../data/storeData';
 
@@ -41,21 +47,41 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   onOpenBulkLabels,
 }) => {
   const [activeStatus, setActiveStatus] = useState<string>('all');
+  const [courierFilter, setCourierFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isDispatching, setIsDispatching] = useState(false);
+  const [isCarrybeeDispatching, setIsCarrybeeDispatching] = useState(false);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [dispatchSuccess, setDispatchSuccess] = useState<string | null>(null);
 
-  // Status filtering
+  // Status & Courier filtering
   const filteredOrders = orders.filter((o) => {
     const matchesStatus = activeStatus === 'all' || o.status === activeStatus;
+    
+    // Courier filter
+    let matchesCourier = true;
+    const isCb = (o.courierName && o.courierName.toLowerCase().includes('carrybee')) ||
+                 (o.consignmentId && (o.consignmentId.startsWith('CB') || o.consignmentId.startsWith('FX')));
+    const isPt = (o.courierName && o.courierName.toLowerCase().includes('pathao')) ||
+                 (o.consignmentId && !isCb);
+
+    if (courierFilter === 'pathao') {
+      matchesCourier = !!o.consignmentId && Boolean(isPt);
+    } else if (courierFilter === 'carrybee') {
+      matchesCourier = !!o.consignmentId && Boolean(isCb);
+    } else if (courierFilter === 'unassigned') {
+      matchesCourier = !o.consignmentId;
+    }
+
     const term = search.toLowerCase();
     const matchesSearch =
       o.orderNumber.toLowerCase().includes(term) ||
       o.customerName.toLowerCase().includes(term) ||
-      o.customerPhone.includes(term);
-    return matchesStatus && matchesSearch;
+      o.customerPhone.includes(term) ||
+      (o.consignmentId && o.consignmentId.toLowerCase().includes(term));
+
+    return matchesStatus && matchesCourier && matchesSearch;
   });
 
   const toggleSelectOrder = (id: string) => {
@@ -84,6 +110,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     const mockReceipt: any = {
       orderId: order.orderNumber,
       createdAt: order.createdAt,
+      courierName: order.courierName,
       customer: {
         fullName: order.customerName,
         phone: order.customerPhone,
@@ -97,14 +124,17 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
       items: order.items,
       total: order.total,
     };
-    const labelData = mapOrderToLabelData(mockReceipt, order.consignmentId);
+    const labelData = mapOrderToLabelData(mockReceipt, order.consignmentId, order.courierName);
     const pdf = generateA4ShippingLabelsPDF([labelData]);
-    pdf.save(`SPARTA-Label-${order.orderNumber}.pdf`);
+    const courierTag = (order.courierName || 'LABEL').replace(/\s+/g, '-');
+    pdf.save(`SPARTA-${courierTag}-${order.orderNumber}.pdf`);
   };
 
   const [isTracking, setIsTracking] = useState(false);
   const [trackingInfo, setTrackingInfo] = useState<PathaoTrackingInfo | null>(null);
+  const [carrybeeTrackingInfo, setCarrybeeTrackingInfo] = useState<CarrybeeTrackingInfo | null>(null);
 
+  // Pathao Dispatch
   const handleDispatchToPathao = async (order: AdminOrder) => {
     setIsDispatching(true);
     setDispatchError(null);
@@ -112,7 +142,6 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
 
     try {
       const creds = getStoredPathaoCredentials();
-      // Pathao Auto-Address Feature: We omit recipient_city & zone so Pathao NLP extracts them
       const result = await createPathaoOrder({
         store_id: creds.storeId,
         merchant_order_id: order.orderNumber,
@@ -135,7 +164,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
       });
 
       setDispatchSuccess(
-        `Successfully dispatched to Pathao Courier! Consignment ID: ${result.consignment_id} (Fee: ৳${result.delivery_fee})`
+        `Dispatched to Pathao Courier! Consignment ID: ${result.consignment_id} (Fee: ৳${result.delivery_fee})`
       );
       onRefresh();
       if (selectedOrder) {
@@ -143,6 +172,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
           ...selectedOrder,
           status: 'processing',
           consignmentId: result.consignment_id,
+          courierName: 'Pathao Courier',
           courierStatus: result.order_status,
         });
       }
@@ -153,13 +183,62 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
+  // Carrybee Dispatch
+  const handleDispatchToCarrybee = async (order: AdminOrder) => {
+    setIsCarrybeeDispatching(true);
+    setDispatchError(null);
+    setDispatchSuccess(null);
+
+    try {
+      const creds = getStoredCarrybeeCredentials();
+      const result = await createCarrybeeOrder({
+        store_id: creds.storeId,
+        merchant_order_id: order.orderNumber,
+        recipient_name: order.customerName,
+        recipient_phone: order.customerPhone,
+        recipient_address: order.shippingAddress,
+        delivery_type: 1, // normal
+        item_type: 2, // parcel
+        item_quantity: Math.max(1, order.items.reduce((acc, it) => acc + it.quantity, 0)),
+        item_weight: 500, // grams
+        amount_to_collect: order.total,
+        item_description: order.items.map((it) => it.name).join(', ') || 'SPARTA Garments',
+        special_instruction: order.internalNotes || 'Handle with care - Luxury garments',
+      });
+
+      await updateOrderStatus(order.id, {
+        status: 'processing',
+        consignmentId: result.consignment_id,
+        courierName: 'Carrybee Courier',
+        courierStatus: result.order_status,
+      });
+
+      setDispatchSuccess(
+        `Dispatched to Carrybee Courier! Consignment ID: ${result.consignment_id} (Fee: ৳${result.delivery_fee})`
+      );
+      onRefresh();
+      if (selectedOrder) {
+        onSelectOrder({
+          ...selectedOrder,
+          status: 'processing',
+          consignmentId: result.consignment_id,
+          courierName: 'Carrybee Courier',
+          courierStatus: result.order_status,
+        });
+      }
+    } catch (err: any) {
+      setDispatchError(err?.message || 'Failed to dispatch to Carrybee Courier');
+    } finally {
+      setIsCarrybeeDispatching(false);
+    }
+  };
+
   const handleTrackPathao = async (consignmentId: string) => {
     setIsTracking(true);
     try {
       const track = await trackPathaoOrder(consignmentId);
       setTrackingInfo(track);
 
-      // Auto update status if delivered
       if (
         track.order_status_slug === 'delivered' ||
         track.order_status?.toLowerCase() === 'delivered'
@@ -181,6 +260,35 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
       }
     } catch (err: any) {
       alert(`Pathao tracking query failed: ${err.message}`);
+    } finally {
+      setIsTracking(false);
+    }
+  };
+
+  const handleTrackCarrybee = async (consignmentId: string) => {
+    setIsTracking(true);
+    try {
+      const track = await trackCarrybeeOrder(consignmentId);
+      setCarrybeeTrackingInfo(track);
+
+      if (track.order_status?.toLowerCase().includes('deliver')) {
+        if (selectedOrder) {
+          await updateOrderStatus(selectedOrder.id, {
+            status: 'delivered',
+            courierStatus: 'Delivered',
+            paymentStatus: 'paid',
+          });
+          onRefresh();
+          onSelectOrder({
+            ...selectedOrder,
+            status: 'delivered',
+            courierStatus: 'Delivered',
+            paymentStatus: 'paid',
+          });
+        }
+      }
+    } catch (err: any) {
+      alert(`Carrybee tracking query failed: ${err.message}`);
     } finally {
       setIsTracking(false);
     }
@@ -265,16 +373,41 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
           ))}
         </div>
 
-        {/* Search */}
-        <div className="relative w-full sm:w-64">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search order #, customer, phone..."
-            className="w-full pl-9 pr-4 py-2 text-xs bg-white dark:bg-[#121216] border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-sm outline-none focus:border-stone-400"
-          />
-          <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-2.5" />
+        {/* Courier & Search Filter */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center bg-stone-100 dark:bg-white/5 p-0.5 rounded text-xs">
+            <span className="text-[10px] text-stone-400 font-mono px-2 uppercase">Courier:</span>
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'pathao', label: 'Pathao' },
+              { id: 'carrybee', label: 'Carrybee' },
+              { id: 'unassigned', label: 'Unassigned' },
+            ].map((cf) => (
+              <button
+                key={cf.id}
+                type="button"
+                onClick={() => setCourierFilter(cf.id)}
+                className={`px-2 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                  courierFilter === cf.id
+                    ? 'bg-white dark:bg-stone-800 text-stone-900 dark:text-white shadow-xs'
+                    : 'text-stone-500 hover:text-stone-900 dark:hover:text-white'
+                }`}
+              >
+                {cf.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative w-full sm:w-60">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search ref, customer, phone, AWB..."
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-[#121216] border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded outline-none focus:border-stone-400"
+            />
+            <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2" />
+          </div>
         </div>
       </div>
 
@@ -297,7 +430,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
                 <th className="py-3 px-4">Customer</th>
                 <th className="py-3 px-4">Shipping Destination</th>
                 <th className="py-3 px-4">COD Total</th>
-                <th className="py-3 px-4">Pathao Consignment</th>
+                <th className="py-3 px-4">Courier &amp; Consignment ID</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -306,12 +439,19 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
               {filteredOrders.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-stone-400">
-                    No orders match the selected status or query.
+                    No orders match the selected filters or search query.
                   </td>
                 </tr>
               ) : (
                 filteredOrders.map((order) => {
                   const isSelected = selectedOrderIds.includes(order.id);
+                  const isCarrybee =
+                    (order.courierName && order.courierName.toLowerCase().includes('carrybee')) ||
+                    (order.consignmentId && (order.consignmentId.startsWith('CB') || order.consignmentId.startsWith('FX')));
+                  const isPathao =
+                    (order.courierName && order.courierName.toLowerCase().includes('pathao')) ||
+                    (order.consignmentId && !isCarrybee);
+
                   return (
                     <tr
                       key={order.id}
@@ -351,10 +491,17 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
                       </td>
                       <td className="py-3.5 px-4">
                         {order.consignmentId ? (
-                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded text-[11px] font-mono text-blue-700 dark:text-blue-300">
-                            <Truck className="w-3 h-3" />
-                            {order.consignmentId}
-                          </div>
+                          isCarrybee ? (
+                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded text-[11px] font-mono text-amber-800 dark:text-amber-300 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                              <span className="font-semibold">Carrybee:</span> {order.consignmentId}
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded text-[11px] font-mono text-blue-700 dark:text-blue-300 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                              <span className="font-semibold">Pathao:</span> {order.consignmentId}
+                            </div>
+                          )
                         ) : (
                           <span className="text-[11px] text-stone-400">Not Dispatched</span>
                         )}
@@ -382,14 +529,14 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
                             type="button"
                             onClick={() => handlePrintSingleLabel(order)}
                             className="p-1.5 text-stone-500 hover:text-stone-900 dark:hover:text-white transition-colors cursor-pointer"
-                            title="Print Label"
+                            title={`Print ${order.courierName || 'Shipping'} Label`}
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
                             onClick={() => onSelectOrder(order)}
-                            className="text-stone-500 hover:text-stone-900 dark:hover:text-white"
+                            className="text-stone-500 hover:text-stone-900 dark:hover:text-white cursor-pointer"
                           >
                             <ChevronRight className="w-4 h-4" />
                           </button>
@@ -404,15 +551,26 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
         </div>
       </div>
 
-      {/* Order Details & Pathao Dispatch Modal */}
+      {/* Order Details & Dual Courier Dispatch Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="w-full max-w-2xl bg-white dark:bg-[#141419] border border-stone-200 dark:border-white/10 rounded-sm shadow-2xl max-h-[90vh] flex flex-col">
             <div className="px-6 py-4 border-b border-stone-200 dark:border-white/10 flex items-center justify-between">
               <div>
-                <h3 className="text-base font-display font-medium text-stone-900 dark:text-white">
-                  Order Details: {selectedOrder.orderNumber}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-display font-medium text-stone-900 dark:text-white">
+                    Order Details: {selectedOrder.orderNumber}
+                  </h3>
+                  {selectedOrder.courierName && (
+                    <span className={`px-2 py-0.5 text-[10px] font-mono rounded font-semibold ${
+                      selectedOrder.courierName.toLowerCase().includes('carrybee')
+                        ? 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300'
+                        : 'bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-950/60 dark:text-blue-300'
+                    }`}>
+                      {selectedOrder.courierName}
+                    </span>
+                  )}
+                </div>
                 <p className="text-[11px] text-stone-400">
                   Placed on {new Date(selectedOrder.createdAt).toLocaleString('en-GB')}
                 </p>
@@ -472,7 +630,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
                     className="px-3 py-1.5 bg-stone-200 hover:bg-stone-300 dark:bg-white/10 dark:hover:bg-white/20 text-stone-900 dark:text-white text-xs font-medium rounded inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    Print Label
+                    Print Sticker
                   </button>
                 </div>
               </div>
@@ -533,84 +691,187 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
                 </div>
               </div>
 
-              {/* Pathao Courier Dispatch Section */}
-              <div className="p-4 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 rounded space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span className="font-medium text-stone-900 dark:text-white">
-                      Pathao Courier Dispatch
-                    </span>
-                  </div>
-                  {selectedOrder.consignmentId && (
-                    <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-mono text-[11px] rounded">
-                      Consignment: {selectedOrder.consignmentId}
-                    </span>
-                  )}
+              {/* DUAL COURIER DISPATCH CONTROL CENTER */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-stone-200 dark:border-white/10 pb-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-700 dark:text-stone-300 flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-stone-500" />
+                    Automated Courier Dispatch Center
+                  </h4>
+                  <span className="text-[10px] text-stone-400 font-mono">
+                    Select Courier &amp; Push to Partner Portal
+                  </span>
                 </div>
 
-                <p className="text-[11px] text-stone-600 dark:text-stone-400">
-                  Transfers order details directly to Pathao Courier system with automated COD parcel creation, weight calculation, and merchant reference.
-                </p>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleDispatchToPathao(selectedOrder)}
-                    disabled={isDispatching}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-colors"
-                  >
-                    {isDispatching ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Send className="w-3.5 h-3.5" />
-                    )}
-                    {selectedOrder.consignmentId ? 'Re-dispatch / Update Pathao' : 'Dispatch to Pathao Courier'}
-                  </button>
-
-                  {selectedOrder.consignmentId && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => handleTrackPathao(selectedOrder.consignmentId!)}
-                        disabled={isTracking}
-                        className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-800 dark:text-stone-200 font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-colors"
-                      >
-                        {isTracking ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Truck className="w-3.5 h-3.5" />
-                        )}
-                        Check Live Status
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handlePrintSingleLabel(selectedOrder)}
-                        className="px-3.5 py-2 bg-stone-900 hover:bg-black text-white dark:bg-white dark:text-black dark:hover:bg-stone-200 font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer transition-colors"
-                        title="Print Pathao Courier Shipping Sticker for this order"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        Print Shipping Sticker
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                {trackingInfo && (
-                  <div className="p-3 bg-white dark:bg-black/30 border border-blue-200 dark:border-blue-900/60 rounded text-[11px] space-y-1">
-                    <div className="flex items-center justify-between font-mono">
-                      <span className="text-stone-500">Live Status:</span>
-                      <span className="font-semibold text-blue-600 dark:text-blue-400 uppercase">
-                        {trackingInfo.order_status}
+                {/* Option A: Carrybee Courier */}
+                <div className="p-4 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-300/70 dark:border-amber-800/40 rounded space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                      <span className="font-semibold text-amber-950 dark:text-amber-200 text-xs">
+                        Carrybee Courier Integration
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.2 bg-amber-200/60 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 rounded font-mono">
+                        v2.0 REST API
                       </span>
                     </div>
-                    <div className="flex items-center justify-between font-mono text-[10px] text-stone-400">
-                      <span>Updated At:</span>
-                      <span>{new Date(trackingInfo.updated_at).toLocaleString()}</span>
-                    </div>
+                    {selectedOrder.consignmentId && selectedOrder.courierName?.toLowerCase().includes('carrybee') && (
+                      <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/70 text-amber-800 dark:text-amber-200 font-mono text-[11px] rounded font-semibold border border-amber-300">
+                        Carrybee AWB: {selectedOrder.consignmentId}
+                      </span>
+                    )}
                   </div>
-                )}
+
+                  <p className="text-[11px] text-stone-600 dark:text-stone-400">
+                    Transfers parcel weight, COD total ({formatBDT(selectedOrder.total)}), and recipient address directly to Carrybee Courier.
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleDispatchToCarrybee(selectedOrder)}
+                      disabled={isCarrybeeDispatching || isDispatching}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-colors shadow-xs"
+                    >
+                      {isCarrybeeDispatching ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Send className="w-3.5 h-3.5" />
+                      )}
+                      {selectedOrder.consignmentId && selectedOrder.courierName?.toLowerCase().includes('carrybee')
+                        ? 'Re-dispatch / Update Carrybee'
+                        : 'Dispatch via Carrybee Courier'}
+                    </button>
+
+                    {selectedOrder.consignmentId && selectedOrder.courierName?.toLowerCase().includes('carrybee') && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleTrackCarrybee(selectedOrder.consignmentId!)}
+                          disabled={isTracking}
+                          className="px-3.5 py-2 bg-white dark:bg-stone-800 hover:bg-stone-100 text-stone-800 dark:text-stone-200 font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer border border-stone-200 dark:border-white/10"
+                        >
+                          {isTracking ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Truck className="w-3.5 h-3.5" />
+                          )}
+                          Track Carrybee Live
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handlePrintSingleLabel(selectedOrder)}
+                          className="px-3.5 py-2 bg-amber-900 hover:bg-black text-white font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
+                          title="Print Carrybee Courier signature shipping sticker"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          Print Carrybee Sticker
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {carrybeeTrackingInfo && (
+                    <div className="p-3 bg-white dark:bg-black/40 border border-amber-200 dark:border-amber-800/50 rounded text-[11px] space-y-1">
+                      <div className="flex items-center justify-between font-mono">
+                        <span className="text-stone-500">Carrybee Status:</span>
+                        <span className="font-semibold text-amber-700 dark:text-amber-400 uppercase">
+                          {carrybeeTrackingInfo.order_status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between font-mono text-[10px] text-stone-400">
+                        <span>Hub: {carrybeeTrackingInfo.hub || 'Central Sorting'}</span>
+                        <span>Fee: ৳{carrybeeTrackingInfo.delivery_fee}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Option B: Pathao Courier */}
+                <div className="p-4 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 rounded space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                      <span className="font-semibold text-blue-950 dark:text-blue-200 text-xs">
+                        Pathao Courier Integration
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.2 bg-blue-200/60 dark:bg-blue-900/60 text-blue-900 dark:text-blue-200 rounded font-mono">
+                        Hermes Aladdin API
+                      </span>
+                    </div>
+                    {selectedOrder.consignmentId && !selectedOrder.courierName?.toLowerCase().includes('carrybee') && (
+                      <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-mono text-[11px] rounded font-semibold border border-blue-300">
+                        Pathao Consignment: {selectedOrder.consignmentId}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-stone-600 dark:text-stone-400">
+                    Transfers order details directly to Pathao Courier system with automated COD parcel creation and merchant reference.
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleDispatchToPathao(selectedOrder)}
+                      disabled={isDispatching || isCarrybeeDispatching}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-colors"
+                    >
+                      {isDispatching ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Send className="w-3.5 h-3.5" />
+                      )}
+                      {selectedOrder.consignmentId && !selectedOrder.courierName?.toLowerCase().includes('carrybee')
+                        ? 'Re-dispatch / Update Pathao'
+                        : 'Dispatch via Pathao Courier'}
+                    </button>
+
+                    {selectedOrder.consignmentId && !selectedOrder.courierName?.toLowerCase().includes('carrybee') && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleTrackPathao(selectedOrder.consignmentId!)}
+                          disabled={isTracking}
+                          className="px-3.5 py-2 bg-white dark:bg-stone-800 hover:bg-stone-100 text-stone-800 dark:text-stone-200 font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer border border-stone-200 dark:border-white/10"
+                        >
+                          {isTracking ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Truck className="w-3.5 h-3.5" />
+                          )}
+                          Track Pathao Live
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handlePrintSingleLabel(selectedOrder)}
+                          className="px-3.5 py-2 bg-stone-900 hover:bg-black text-white dark:bg-white dark:text-black dark:hover:bg-stone-200 font-medium text-xs rounded inline-flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
+                          title="Print Pathao Courier Shipping Sticker for this order"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          Print Pathao Sticker
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {trackingInfo && (
+                    <div className="p-3 bg-white dark:bg-black/30 border border-blue-200 dark:border-blue-900/60 rounded text-[11px] space-y-1">
+                      <div className="flex items-center justify-between font-mono">
+                        <span className="text-stone-500">Live Status:</span>
+                        <span className="font-semibold text-blue-600 dark:text-blue-400 uppercase">
+                          {trackingInfo.order_status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between font-mono text-[10px] text-stone-400">
+                        <span>Updated At:</span>
+                        <span>{new Date(trackingInfo.updated_at).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

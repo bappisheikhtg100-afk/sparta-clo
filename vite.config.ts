@@ -35,6 +35,18 @@ export default defineConfig(({ command }) => {
           rewrite: (path) => path.replace(/^\/pathao-proxy-sandbox/, ''),
           secure: true,
         },
+        '/carrybee-proxy-live': {
+          target: 'https://developers.carrybee.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/carrybee-proxy-live/, ''),
+          secure: true,
+        },
+        '/carrybee-proxy-sandbox': {
+          target: 'https://sandbox.carrybee.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/carrybee-proxy-sandbox/, ''),
+          secure: true,
+        },
       },
     },
   };

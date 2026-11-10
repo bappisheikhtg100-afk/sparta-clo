@@ -22,17 +22,28 @@ export interface PrintableLabelData {
   specialInstructions?: string;
 }
 
-export function mapOrderToLabelData(order: OrderReceipt, consignmentId?: string): PrintableLabelData {
+export function mapOrderToLabelData(
+  order: OrderReceipt,
+  consignmentId?: string,
+  courierName?: string
+): PrintableLabelData {
   const itemsText = order.items
     .map((item) => `${item.quantity}x ${item.name} (${item.size}${item.color ? ` / ${item.color}` : ''})`)
     .join(', ');
 
   const totalQty = order.items.reduce((acc, it) => acc + it.quantity, 0);
 
+  const determinedCourier =
+    courierName ||
+    order.courierName ||
+    ((consignmentId && (consignmentId.startsWith('CB') || consignmentId.startsWith('FX')))
+      ? 'CARRYBEE COURIER'
+      : 'PATHAO COURIER');
+
   return {
     orderId: order.orderId,
     consignmentId: consignmentId || order.orderId,
-    courierName: 'PATHAO COURIER',
+    courierName: determinedCourier.toUpperCase(),
     createdAt: new Date(order.createdAt).toLocaleDateString('en-GB', {
       day: '2-digit',
       month: 'short',
@@ -96,6 +107,8 @@ function drawSingleLabel(
   w: number,
   h: number
 ) {
+  const isCarrybee = (label.courierName || '').toUpperCase().includes('CARRYBEE');
+
   // Outer Border with rounded corners
   doc.setDrawColor(30, 30, 30);
   doc.setLineWidth(0.35);
@@ -105,22 +118,33 @@ function drawSingleLabel(
   doc.setFillColor(10, 10, 12);
   doc.rect(x, y, w, 12, 'F');
 
-  // Header Brand Name (Large bold SPARTA)
-  doc.setFont('helvetica', 'bold');
+  // Header Brand Name (Stylized Luxury Serif Letterspaced S P A R T A)
+  doc.setFont('times', 'bold');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(13);
-  doc.text('SPARTA', x + 5, y + 8.5);
+  doc.text('S P A R T A', x + 5, y + 8.5);
 
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(200, 200, 200);
-  doc.text('LUXURY ATELIER', x + 34, y + 8.5);
+  doc.setFontSize(6.5);
+  doc.setFont('times', 'italic');
+  doc.setTextColor(225, 215, 195); // Champagne gold accent
+  doc.text('· HAUTE ATELIER ·', x + 38, y + 8.5);
 
-  // Courier Badge
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(255, 255, 255);
-  doc.text(label.courierName || 'PATHAO COURIER', x + w - 5, y + 8.5, { align: 'right' });
+  // Distinctive Courier Badge (Carrybee Amber vs Pathao Red)
+  if (isCarrybee) {
+    doc.setFillColor(245, 166, 35); // Signature Carrybee Amber
+    doc.roundedRect(x + w - 46, y + 2, 42, 8, 1, 1, 'F');
+    doc.setTextColor(15, 15, 15);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.text('CARRYBEE COURIER', x + w - 25, y + 7.5, { align: 'center' });
+  } else {
+    doc.setFillColor(220, 38, 38); // Signature Pathao Crimson
+    doc.roundedRect(x + w - 44, y + 2, 40, 8, 1, 1, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.text('PATHAO COURIER', x + w - 24, y + 7.5, { align: 'center' });
+  }
 
   // Subheader: Order & Tracking IDs
   const subY = y + 16.5;
@@ -144,19 +168,33 @@ function drawSingleLabel(
   doc.setLineWidth(0.2);
   doc.line(x + 5, subY + 2.5, x + w - 5, subY + 2.5);
 
-  // BIG PROMINENT PATHAO CONSIGNMENT ID BOX
+  // BIG PROMINENT CONSIGNMENT ID BOX (Distinct Styling for Carrybee vs Pathao)
   const codeBoxY = subY + 4.5;
-  doc.setFillColor(242, 244, 248);
-  doc.setDrawColor(30, 30, 30);
-  doc.setLineWidth(0.35);
-  doc.roundedRect(x + 4, codeBoxY, w - 8, 12, 1, 1, 'FD');
+  if (isCarrybee) {
+    doc.setFillColor(255, 248, 235); // Warm Amber Tint
+    doc.setDrawColor(217, 119, 6); // Amber Border
+    doc.setLineWidth(0.4);
+    doc.roundedRect(x + 4, codeBoxY, w - 8, 12, 1, 1, 'FD');
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(100, 100, 110);
-  doc.text('PATHAO CONSIGNMENT / TRACKING ID', x + w / 2, codeBoxY + 3.8, {
-    align: 'center',
-  });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(180, 83, 9);
+    doc.text('CARRYBEE CONSIGNMENT / ORDER ID', x + w / 2, codeBoxY + 3.8, {
+      align: 'center',
+    });
+  } else {
+    doc.setFillColor(242, 246, 254); // Slate Blue Tint
+    doc.setDrawColor(37, 99, 235); // Blue Border
+    doc.setLineWidth(0.4);
+    doc.roundedRect(x + 4, codeBoxY, w - 8, 12, 1, 1, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(29, 78, 216);
+    doc.text('PATHAO CONSIGNMENT / TRACKING ID', x + w / 2, codeBoxY + 3.8, {
+      align: 'center',
+    });
+  }
 
   doc.setFont('courier', 'bold');
   doc.setFontSize(13);

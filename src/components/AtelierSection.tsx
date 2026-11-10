@@ -5,8 +5,10 @@ import { formatBDT, MEDIA_ASSETS, STORE_INFO } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
 import { SmartImage } from './SmartImage';
 
+import { CustomerReviewsMarquee } from './CustomerReviewsMarquee';
+
 export const AtelierSection: React.FC = () => {
-  const { lastOrder, navigate, jumpToCategory, products } = useStore();
+  const { lastOrder, navigate, jumpToCategory } = useStore();
 
   const houseCodes = [
     {
@@ -32,73 +34,15 @@ export const AtelierSection: React.FC = () => {
     },
   ];
 
-  const capProduct = products.find((p) => p.category === 'Accessories') || products[0];
-  const shoeProduct = products.find((p) => p.category === 'Shoes/Sneakers') || products[1] || products[0];
-
   return (
     <section
       id="atelier"
       className="border-t border-stone-200/90 dark:border-zinc-800/90 bg-[#F3F1EC] dark:bg-[#0D0D10] transition-colors duration-200"
     >
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-12 py-20 sm:py-28">
-        {/* Editorial Split Campaign Spread */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center pb-20 border-b border-stone-300/70 dark:border-zinc-800">
-          <div className="lg:col-span-5 space-y-5">
-            <p className="text-xs text-stone-500 dark:text-zinc-400">
-              House Philosophy · Est. Bangladesh
-            </p>
-            <h2 className="font-display text-4xl sm:text-5xl font-normal text-[#111111] dark:text-[#F5F4F0] leading-[1.05] tracking-tight [text-wrap:balance]">
-              Discipline builds <em className="italic font-normal">freedom.</em>
-            </h2>
-            <p className="text-sm sm:text-[15px] text-stone-600 dark:text-zinc-400 leading-[1.75]">
-              SPARTA brings together timeless old-money knitwear, crisp pleated tailoring, court footwear, and evocative fragrances under one unified house—delivered straight to your door across Bangladesh.
-            </p>
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => jumpToCategory('Perfume')}
-                className="min-h-[44px] inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-[#111111] dark:text-[#F5F4F0] border-b border-[#111111] dark:border-[#F5F4F0] pb-1 hover:opacity-70 transition-opacity cursor-pointer"
-              >
-                <span>Explore Fragrance House</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Dual Campaign Boards from Authentic SPARTA Archive */}
-          <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => navigate('product', capProduct)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') navigate('product', capProduct);
-              }}
-              className="group relative aspect-[16/10] bg-[#E6E5E2] overflow-hidden border border-stone-200/80 dark:border-zinc-800 cursor-pointer"
-            >
-              <SmartImage
-                src={MEDIA_ASSETS.campaignHeadwear}
-                alt="SPARTA Discipline Builds Freedom headwear campaign"
-                className="w-full h-full object-cover object-center transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105"
-              />
-            </div>
-
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => navigate('product', shoeProduct)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') navigate('product', shoeProduct);
-              }}
-              className="group relative aspect-[16/10] bg-[#D1CCC3] overflow-hidden border border-stone-200/80 dark:border-zinc-800 cursor-pointer"
-            >
-              <SmartImage
-                src={MEDIA_ASSETS.campaignFootwear}
-                alt="SPARTA Built For More footwear campaign"
-                className="w-full h-full object-cover object-center transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105"
-              />
-            </div>
-          </div>
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-12 py-16 sm:py-24">
+        {/* Customer Reviews Section with Bengali Short Reviews Marquee (Right to Left) */}
+        <div className="pb-16 border-b border-stone-300/70 dark:border-zinc-800">
+          <CustomerReviewsMarquee />
         </div>
 
         {/* 3 Architectural House Codes */}

@@ -25,14 +25,40 @@ import {
   PATHAO_SANDBOX_DEFAULTS,
   PATHAO_PRODUCTION_DEFAULTS,
 } from '../services/pathaoService';
+import {
+  CarrybeeCredentials,
+  CarrybeeStore,
+  getStoredCarrybeeCredentials,
+  saveCarrybeeCredentials,
+  syncCarrybeeCredentialsFromSupabase,
+  fetchCarrybeeStores,
+  CARRYBEE_PRODUCTION_DEFAULTS,
+  CARRYBEE_SANDBOX_DEFAULTS,
+} from '../services/carrybeeService';
 import { CLOUDINARY_CONFIG } from '../services/cloudinaryService';
 import { useStore } from '../context/StoreContext';
 
 export const CourierSettings: React.FC = () => {
   const { storeSettings, updateSettings } = useStore();
+  const [activeCourierTab, setActiveCourierTab] = useState<'pathao' | 'carrybee'>('pathao');
+
+  // Pathao States
   const [creds, setCreds] = useState<PathaoCredentials>(getStoredPathaoCredentials());
   const [showSecret, setShowSecret] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [stores, setStores] = useState<PathaoStore[]>([]);
+  const [isFetchingStores, setIsFetchingStores] = useState(false);
+
+  // Carrybee States
+  const [carrybeeCreds, setCarrybeeCreds] = useState<CarrybeeCredentials>(getStoredCarrybeeCredentials());
+  const [showCarrybeeSecret, setShowCarrybeeSecret] = useState(false);
+  const [showCarrybeeContext, setShowCarrybeeContext] = useState(false);
+  const [isTestingCarrybee, setIsTestingCarrybee] = useState(false);
+  const [carrybeeTestResult, setCarrybeeTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [carrybeeStores, setCarrybeeStores] = useState<CarrybeeStore[]>([]);
+  const [isFetchingCarrybeeStores, setIsFetchingCarrybeeStores] = useState(false);
 
   // Announcement & Social Links
   const [announcementText, setAnnouncementText] = useState(storeSettings.announcementText);
@@ -42,11 +68,6 @@ export const CourierSettings: React.FC = () => {
   const [tiktokUrl, setTiktokUrl] = useState(storeSettings.tiktokUrl);
   const [whatsappNumber, setWhatsappNumber] = useState(storeSettings.whatsappNumber);
 
-  // Testing & Store states
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [stores, setStores] = useState<PathaoStore[]>([]);
-  const [isFetchingStores, setIsFetchingStores] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
   // Delivery fee rules
@@ -71,11 +92,19 @@ export const CourierSettings: React.FC = () => {
         setCreds(synced);
       }
     });
+
+    // Multi-device sync: Load Carrybee credentials from Supabase
+    syncCarrybeeCredentialsFromSupabase().then((synced) => {
+      if (synced && synced.clientId) {
+        setCarrybeeCreds(synced);
+      }
+    });
   }, [storeSettings]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     savePathaoCredentials(creds);
+    saveCarrybeeCredentials(carrybeeCreds);
     await updateSettings({
       ...storeSettings,
       announcementText,
@@ -135,6 +164,39 @@ export const CourierSettings: React.FC = () => {
     }
   };
 
+  const handleTestCarrybeeConnection = async () => {
+    setIsTestingCarrybee(true);
+    setCarrybeeTestResult(null);
+
+    try {
+      setIsFetchingCarrybeeStores(true);
+      const storeList = await fetchCarrybeeStores(carrybeeCreds);
+      setCarrybeeStores(storeList);
+
+      let storeMsg = '';
+      if (storeList.length > 0) {
+        const activeStore = storeList.find((s) => s.is_active) || storeList[0];
+        const updated = { ...carrybeeCreds, storeId: String(activeStore.id) };
+        setCarrybeeCreds(updated);
+        saveCarrybeeCredentials(updated);
+        storeMsg = ` Connected Store: "${activeStore.name}" (Store ID: ${activeStore.id}). Address: ${activeStore.address}.`;
+      }
+
+      setCarrybeeTestResult({
+        success: true,
+        message: `Successfully authenticated with Carrybee Courier API!${storeMsg}`,
+      });
+    } catch (err: any) {
+      setCarrybeeTestResult({
+        success: false,
+        message: err?.message || 'Carrybee authentication failed. Please verify credentials.',
+      });
+    } finally {
+      setIsFetchingCarrybeeStores(false);
+      setIsTestingCarrybee(false);
+    }
+  };
+
   return (
     <div className="space-y-8 max-w-4xl text-xs">
       <div className="pb-2 border-b border-stone-200 dark:border-white/10">
@@ -147,268 +209,503 @@ export const CourierSettings: React.FC = () => {
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
+        {/* Courier Platform Switcher Tabs */}
+        <div className="flex items-center gap-2 border-b border-stone-200 dark:border-white/10 pb-3">
+          <button
+            type="button"
+            onClick={() => setActiveCourierTab('pathao')}
+            className={`px-4 py-2 text-xs font-medium rounded-sm inline-flex items-center gap-2 cursor-pointer transition-colors ${
+              activeCourierTab === 'pathao'
+                ? 'bg-rose-600 text-white font-semibold'
+                : 'bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-700 dark:text-stone-300'
+            }`}
+          >
+            <Truck className="w-3.5 h-3.5" />
+            <span>Pathao Courier (Aladdin v1)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveCourierTab('carrybee')}
+            className={`px-4 py-2 text-xs font-medium rounded-sm inline-flex items-center gap-2 cursor-pointer transition-colors ${
+              activeCourierTab === 'carrybee'
+                ? 'bg-amber-600 text-white font-semibold'
+                : 'bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-700 dark:text-stone-300'
+            }`}
+          >
+            <Truck className="w-3.5 h-3.5" />
+            <span>Carrybee Courier (Developers v2.0)</span>
+          </button>
+        </div>
+
         {/* Pathao Courier Settings Card */}
-        <div className="p-6 bg-white dark:bg-[#121216] border border-stone-200 dark:border-white/10 rounded-sm space-y-5">
-          <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-white/5">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-rose-50 dark:bg-rose-950/40 text-rose-600 rounded">
-                <Truck className="w-4 h-4" />
+        {activeCourierTab === 'pathao' && (
+          <div className="p-6 bg-white dark:bg-[#121216] border border-stone-200 dark:border-white/10 rounded-sm space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-white/5">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-rose-50 dark:bg-rose-950/40 text-rose-600 rounded">
+                  <Truck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-stone-900 dark:text-white">
+                    Pathao Courier API (Hermes Aladdin)
+                  </h3>
+                  <p className="text-[11px] text-stone-500">
+                    Direct REST integration with Pathao Merchant API for automated parcel dispatch
+                  </p>
+                </div>
               </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const updated = {
+                      ...PATHAO_PRODUCTION_DEFAULTS,
+                      storeId: 500277,
+                      isSandbox: false,
+                    };
+                    setCreds(updated);
+                    savePathaoCredentials(updated);
+                    setTestResult({
+                      success: true,
+                      message: 'Your Live Pathao credentials loaded (Best Test Brand - Store ID: 500277). Click "Test Pathao Credentials" to verify.',
+                    });
+                  }}
+                  className="px-2.5 py-1 bg-stone-900 dark:bg-white text-white dark:text-black rounded text-[11px] font-medium transition-colors cursor-pointer"
+                >
+                  Load My Live Credentials
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const updated = {
+                      ...PATHAO_SANDBOX_DEFAULTS,
+                      storeId: 11,
+                      isSandbox: true,
+                    };
+                    setCreds(updated);
+                    savePathaoCredentials(updated);
+                    setTestResult({
+                      success: true,
+                      message: 'Official Pathao Sandbox credentials loaded (Demo Store ID: 11). Click "Test Pathao Credentials" to verify.',
+                    });
+                  }}
+                  className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-700 dark:text-stone-300 rounded text-[11px] font-medium transition-colors cursor-pointer"
+                >
+                  Load Sandbox Preset
+                </button>
+
+                <label className="flex items-center gap-1.5 ml-1 cursor-pointer">
+                  <span className={`text-[11px] font-medium ${creds.isSandbox ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {creds.isSandbox ? 'Sandbox (Test)' : 'Production (Live)'}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={creds.isSandbox}
+                    onChange={(e) => {
+                      const isSand = e.target.checked;
+                      const updated = {
+                        ...creds,
+                        isSandbox: isSand,
+                        storeId: isSand ? 11 : 500277,
+                      };
+                      setCreds(updated);
+                      savePathaoCredentials(updated);
+                    }}
+                    className="rounded border-stone-300 cursor-pointer"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Auto-Address & Environment Notice */}
+            <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded text-[11px] text-emerald-900 dark:text-emerald-200 space-y-1">
+              <div className="font-semibold flex items-center gap-1.5">
+                <span>Pathao Merchant Reverse-Proxy &amp; Auto-Address Active</span>
+                <span className="px-1.5 py-0.2 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 text-[10px] rounded">
+                  Verified
+                </span>
+              </div>
+              <p className="text-emerald-800 dark:text-emerald-300">
+                API requests are routed through the backend reverse-proxy, eliminating browser CORS blocks. Pathao's official NLP engine automatically parses recipient address strings to populate city, zone, and delivery hubs.
+              </p>
+            </div>
+
+            {testResult && (
+              <div
+                className={`p-3 rounded border text-[11px] flex items-center gap-2 ${
+                  testResult.success
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300'
+                    : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-300'
+                }`}
+              >
+                {testResult.success ? (
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                )}
+                <span>{testResult.message}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <h3 className="text-sm font-medium text-stone-900 dark:text-white">
-                  Pathao Courier API (Hermes Aladdin)
-                </h3>
-                <p className="text-[11px] text-stone-500">
-                  Direct REST integration with Pathao Merchant API for automated parcel dispatch
+                <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                  Client ID
+                </label>
+                <input
+                  type="text"
+                  value={creds.clientId}
+                  onChange={(e) => setCreds({ ...creds, clientId: e.target.value })}
+                  placeholder="Pathao OAuth Client ID"
+                  className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                  Client Secret
+                </label>
+                <div className="relative">
+                  <input
+                    type={showSecret ? 'text' : 'password'}
+                    value={creds.clientSecret}
+                    onChange={(e) => setCreds({ ...creds, clientSecret: e.target.value })}
+                    placeholder="Pathao OAuth Client Secret"
+                    className="w-full pl-3 pr-9 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecret(!showSecret)}
+                    className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600 dark:hover:text-white cursor-pointer"
+                  >
+                    {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                  Merchant Username / Email *
+                </label>
+                <input
+                  type="text"
+                  value={creds.username}
+                  onChange={(e) => setCreds({ ...creds, username: e.target.value })}
+                  placeholder="merchant-email@sparta.com"
+                  className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+                />
+                <span className="text-[10px] text-stone-400 mt-1 block">
+                  The registered login email from your merchant.pathao.com account.
+                </span>
+              </div>
+
+              <div>
+                <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                  Merchant Account Password *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={creds.password}
+                    onChange={(e) => setCreds({ ...creds, password: e.target.value })}
+                    placeholder="••••••••••••"
+                    className="w-full pl-3 pr-9 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600 dark:hover:text-white cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <span className="text-[10px] text-stone-400 mt-1 block">
+                  Required by Pathao OAuth2 Password Grant to bind token to your merchant ID.
+                </span>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                  Pathao Webhook Secret (Optional / Recommended)
+                </label>
+                <input
+                  type="text"
+                  value={creds.webhookSecret || ''}
+                  onChange={(e) => setCreds({ ...creds, webhookSecret: e.target.value })}
+                  placeholder="Webhook verification secret token"
+                  className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+                />
+                <span className="text-[10px] text-stone-400 mt-1 block">
+                  Secures incoming parcel status webhooks (Delivered, In-Transit, Returned) from Pathao.
+                </span>
+              </div>
+
+              <div className="sm:col-span-2 p-3 bg-stone-50 dark:bg-black/40 border border-stone-200 dark:border-white/10 rounded">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-stone-500">
+                    Your Webhook Callback URL
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('https://xqzzeisabqsqblogbvhb.supabase.co/functions/v1/pathao-webhook');
+                      alert('Webhook URL copied to clipboard!');
+                    }}
+                    className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                  >
+                    Copy URL
+                  </button>
+                </div>
+                <code className="text-[11px] font-mono text-stone-700 dark:text-stone-300 select-all block break-all">
+                  https://xqzzeisabqsqblogbvhb.supabase.co/functions/v1/pathao-webhook
+                </code>
+                <p className="text-[10px] text-stone-500 mt-1.5 leading-relaxed">
+                  <strong>How to get Webhook Secret:</strong> In your <a href="https://merchant.pathao.com" target="_blank" rel="noreferrer" className="underline text-blue-500">merchant.pathao.com</a> account, click <strong>Developer&apos;s API</strong> on the left sidebar &rarr; click <strong>Webhook Integration</strong> &rarr; paste the URL above &rarr; click Save. Pathao will generate your secret key. (Note: This is 100% optional; order creation and live parcel tracking work directly without it).
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Store Selection if fetched */}
+            {stores.length > 0 && (
+              <div>
+                <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                  Active Pickup Store
+                </label>
+                <select
+                  value={creds.storeId || ''}
+                  onChange={(e) => setCreds({ ...creds, storeId: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none"
+                >
+                  {stores.map((s: PathaoStore) => (
+                    <option key={s.store_id} value={s.store_id}>
+                      {s.store_name} — {s.store_address}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => {
-                  const updated = {
-                    ...PATHAO_PRODUCTION_DEFAULTS,
-                    storeId: 500277,
-                    isSandbox: false,
-                  };
-                  setCreds(updated);
-                  savePathaoCredentials(updated);
-                  setTestResult({
-                    success: true,
-                    message: 'Your Live Pathao credentials loaded (Best Test Brand - Store ID: 500277). Click "Test Pathao Credentials" to verify.',
-                  });
-                }}
-                className="px-2.5 py-1 bg-stone-900 dark:bg-white text-white dark:text-black rounded text-[11px] font-medium transition-colors cursor-pointer"
+                onClick={handleTestConnection}
+                disabled={isTesting}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-900 dark:text-white font-medium rounded-sm inline-flex items-center gap-2 cursor-pointer transition-colors"
               >
-                Load My Live Credentials
+                {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Test Pathao Credentials
               </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const updated = {
-                    ...PATHAO_SANDBOX_DEFAULTS,
-                    storeId: 11,
-                    isSandbox: true,
-                  };
-                  setCreds(updated);
-                  savePathaoCredentials(updated);
-                  setTestResult({
-                    success: true,
-                    message: 'Official Pathao Sandbox credentials loaded (Demo Store ID: 11). Click "Test Pathao Credentials" to verify.',
-                  });
-                }}
-                className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-700 dark:text-stone-300 rounded text-[11px] font-medium transition-colors cursor-pointer"
-              >
-                Load Sandbox Preset
-              </button>
-
-              <label className="flex items-center gap-1.5 ml-1 cursor-pointer">
-                <span className={`text-[11px] font-medium ${creds.isSandbox ? 'text-amber-600' : 'text-emerald-600'}`}>
-                  {creds.isSandbox ? 'Sandbox (Test)' : 'Production (Live)'}
-                </span>
-                <input
-                  type="checkbox"
-                  checked={creds.isSandbox}
-                  onChange={(e) => {
-                    const isSand = e.target.checked;
-                    const updated = {
-                      ...creds,
-                      isSandbox: isSand,
-                      storeId: isSand ? 11 : 500277,
-                    };
-                    setCreds(updated);
-                    savePathaoCredentials(updated);
-                  }}
-                  className="rounded border-stone-300 cursor-pointer"
-                />
-              </label>
             </div>
           </div>
+        )}
 
-          {/* Auto-Address & Environment Notice */}
-          <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded text-[11px] text-emerald-900 dark:text-emerald-200 space-y-1">
-            <div className="font-semibold flex items-center gap-1.5">
-              <span>Pathao Merchant Reverse-Proxy &amp; Auto-Address Active</span>
-              <span className="px-1.5 py-0.2 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 text-[10px] rounded">
-                Verified
-              </span>
-            </div>
-            <p className="text-emerald-800 dark:text-emerald-300">
-              API requests are routed through the backend reverse-proxy, eliminating browser CORS blocks. Pathao's official NLP engine automatically parses recipient address strings to populate city, zone, and delivery hubs.
-            </p>
-          </div>
-
-
-          {testResult && (
-            <div
-              className={`p-3 rounded border text-[11px] flex items-center gap-2 ${
-                testResult.success
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300'
-                  : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-300'
-              }`}
-            >
-              {testResult.success ? (
-                <CheckCircle className="w-4 h-4 shrink-0" />
-              ) : (
-                <AlertCircle className="w-4 h-4 shrink-0" />
-              )}
-              <span>{testResult.message}</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
-                Client ID
-              </label>
-              <input
-                type="text"
-                value={creds.clientId}
-                onChange={(e) => setCreds({ ...creds, clientId: e.target.value })}
-                placeholder="Pathao OAuth Client ID"
-                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
-                Client Secret
-              </label>
-              <div className="relative">
-                <input
-                  type={showSecret ? 'text' : 'password'}
-                  value={creds.clientSecret}
-                  onChange={(e) => setCreds({ ...creds, clientSecret: e.target.value })}
-                  placeholder="Pathao OAuth Client Secret"
-                  className="w-full pl-3 pr-9 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowSecret(!showSecret)}
-                  className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600 dark:hover:text-white cursor-pointer"
-                >
-                  {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
+        {/* Carrybee Courier Settings Card */}
+        {activeCourierTab === 'carrybee' && (
+          <div className="p-6 bg-white dark:bg-[#121216] border border-amber-300/40 dark:border-amber-500/20 rounded-sm space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-white/5">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-50 dark:bg-amber-950/40 text-amber-600 rounded">
+                  <Truck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-stone-900 dark:text-white">
+                    Carrybee Courier API (Developers v2.0)
+                  </h3>
+                  <p className="text-[11px] text-stone-500">
+                    Direct integration with Carrybee Delivery API for merchant automated parcel dispatch
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
-                Merchant Username / Email *
-              </label>
-              <input
-                type="text"
-                value={creds.username}
-                onChange={(e) => setCreds({ ...creds, username: e.target.value })}
-                placeholder="merchant-email@sparta.com"
-                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
-              />
-              <span className="text-[10px] text-stone-400 mt-1 block">
-                The registered login email from your merchant.pathao.com account.
-              </span>
-            </div>
-
-            <div>
-              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
-                Merchant Account Password *
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={creds.password}
-                  onChange={(e) => setCreds({ ...creds, password: e.target.value })}
-                  placeholder="••••••••••••"
-                  className="w-full pl-3 pr-9 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600 dark:hover:text-white cursor-pointer"
-                >
-                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-              <span className="text-[10px] text-stone-400 mt-1 block">
-                Required by Pathao OAuth2 Password Grant to bind token to your merchant ID.
-              </span>
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
-                Pathao Webhook Secret (Optional / Recommended)
-              </label>
-              <input
-                type="text"
-                value={creds.webhookSecret || ''}
-                onChange={(e) => setCreds({ ...creds, webhookSecret: e.target.value })}
-                placeholder="Webhook verification secret token"
-                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
-              />
-              <span className="text-[10px] text-stone-400 mt-1 block">
-                Secures incoming parcel status webhooks (Delivered, In-Transit, Returned) from Pathao.
-              </span>
-            </div>
-
-            <div className="sm:col-span-2 p-3 bg-stone-50 dark:bg-black/40 border border-stone-200 dark:border-white/10 rounded">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-stone-500">
-                  Your Webhook Callback URL
-                </span>
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText('https://xqzzeisabqsqblogbvhb.supabase.co/functions/v1/pathao-webhook');
-                    alert('Webhook URL copied to clipboard!');
+                    const updated = {
+                      ...CARRYBEE_PRODUCTION_DEFAULTS,
+                      isSandbox: false,
+                    };
+                    setCarrybeeCreds(updated);
+                    saveCarrybeeCredentials(updated);
+                    setCarrybeeTestResult({
+                      success: true,
+                      message: 'Your Live Carrybee credentials loaded (Production mode). Click "Test Carrybee Credentials" to verify.',
+                    });
                   }}
-                  className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[11px] font-medium transition-colors cursor-pointer"
                 >
-                  Copy URL
+                  Load My Live Credentials
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const updated = {
+                      ...CARRYBEE_SANDBOX_DEFAULTS,
+                      isSandbox: true,
+                    };
+                    setCarrybeeCreds(updated);
+                    saveCarrybeeCredentials(updated);
+                    setCarrybeeTestResult({
+                      success: true,
+                      message: 'Official Carrybee Sandbox credentials loaded! Click "Test Carrybee Credentials" to verify.',
+                    });
+                  }}
+                  className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-700 dark:text-stone-300 rounded text-[11px] font-medium transition-colors cursor-pointer"
+                >
+                  Load Sandbox Preset
+                </button>
+
+                <label className="flex items-center gap-1.5 ml-1 cursor-pointer">
+                  <span className={`text-[11px] font-medium ${carrybeeCreds.isSandbox ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {carrybeeCreds.isSandbox ? 'Sandbox (Test)' : 'Production (Live)'}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={carrybeeCreds.isSandbox}
+                    onChange={(e) => {
+                      const isSand = e.target.checked;
+                      const updated = {
+                        ...carrybeeCreds,
+                        isSandbox: isSand,
+                      };
+                      setCarrybeeCreds(updated);
+                      saveCarrybeeCredentials(updated);
+                    }}
+                    className="rounded border-stone-300 cursor-pointer"
+                  />
+                </label>
               </div>
-              <code className="text-[11px] font-mono text-stone-700 dark:text-stone-300 select-all block break-all">
-                https://xqzzeisabqsqblogbvhb.supabase.co/functions/v1/pathao-webhook
-              </code>
-              <p className="text-[10px] text-stone-500 mt-1.5 leading-relaxed">
-                <strong>How to get Webhook Secret:</strong> In your <a href="https://merchant.pathao.com" target="_blank" rel="noreferrer" className="underline text-blue-500">merchant.pathao.com</a> account, click <strong>Developer&apos;s API</strong> on the left sidebar &rarr; click <strong>Webhook Integration</strong> &rarr; paste the URL above &rarr; click Save. Pathao will generate your secret key. (Note: This is 100% optional; order creation and live parcel tracking work directly without it).
+            </div>
+
+            {/* Carrybee Status Notice */}
+            <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded text-[11px] text-amber-900 dark:text-amber-200 space-y-1">
+              <div className="font-semibold flex items-center gap-1.5">
+                <span>Carrybee Merchant Gateway Active</span>
+                <span className="px-1.5 py-0.2 bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 text-[10px] rounded">
+                  v2.0 REST
+                </span>
+              </div>
+              <p className="text-amber-800 dark:text-amber-300">
+                Supports single and batch shipments, reverse pickup exchanges, nationwide zones, and automated doorstep tracking.
               </p>
             </div>
-          </div>
 
-          {/* Store Selection if fetched */}
-          {stores.length > 0 && (
-            <div>
-              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
-                Active Pickup Store
-              </label>
-              <select
-                value={creds.storeId || ''}
-                onChange={(e) => setCreds({ ...creds, storeId: Number(e.target.value) })}
-                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none"
+            {carrybeeTestResult && (
+              <div
+                className={`p-3 rounded border text-[11px] flex items-center gap-2 ${
+                  carrybeeTestResult.success
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300'
+                    : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-300'
+                }`}
               >
-                {stores.map((s: PathaoStore) => (
-                  <option key={s.store_id} value={s.store_id}>
-                    {s.store_name} — {s.store_address}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+                {carrybeeTestResult.success ? (
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                )}
+                <span>{carrybeeTestResult.message}</span>
+              </div>
+            )}
 
-          <div className="flex items-center gap-3 pt-2">
-            <button
-              type="button"
-              onClick={handleTestConnection}
-              disabled={isTesting}
-              className="px-4 py-2 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/15 text-stone-900 dark:text-white font-medium rounded-sm inline-flex items-center gap-2 cursor-pointer transition-colors"
-            >
-              {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-              Test Pathao Credentials
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                  Carrybee Client ID *
+                </label>
+                <input
+                  type="text"
+                  value={carrybeeCreds.clientId}
+                  onChange={(e) => setCarrybeeCreds({ ...carrybeeCreds, clientId: e.target.value })}
+                  placeholder="e.g. ae2fce67-a7b6-4749-82ff-..."
+                  className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                  Carrybee Client Secret *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCarrybeeSecret ? 'text' : 'password'}
+                    value={carrybeeCreds.clientSecret}
+                    onChange={(e) => setCarrybeeCreds({ ...carrybeeCreds, clientSecret: e.target.value })}
+                    placeholder="Carrybee Client Secret"
+                    className="w-full pl-3 pr-9 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCarrybeeSecret(!showCarrybeeSecret)}
+                    className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600 dark:hover:text-white cursor-pointer"
+                  >
+                    {showCarrybeeSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                  Carrybee Client Context *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCarrybeeContext ? 'text' : 'password'}
+                    value={carrybeeCreds.clientContext}
+                    onChange={(e) => setCarrybeeCreds({ ...carrybeeCreds, clientContext: e.target.value })}
+                    placeholder="e.g. MJh6nyloHRUQemOjrJSYwEbdaLFTuX"
+                    className="w-full pl-3 pr-9 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCarrybeeContext(!showCarrybeeContext)}
+                    className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600 dark:hover:text-white cursor-pointer"
+                  >
+                    {showCarrybeeContext ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <span className="text-[10px] text-stone-400 mt-1 block">
+                  Required by Carrybee API to identify the merchant business scope.
+                </span>
+              </div>
+            </div>
+
+            {/* Carrybee Store Selection if fetched */}
+            {carrybeeStores.length > 0 && (
+              <div>
+                <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                  Active Carrybee Pickup Store
+                </label>
+                <select
+                  value={carrybeeCreds.storeId || ''}
+                  onChange={(e) => setCarrybeeCreds({ ...carrybeeCreds, storeId: e.target.value })}
+                  className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none"
+                >
+                  {carrybeeStores.map((s: CarrybeeStore) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} — {s.address}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleTestCarrybeeConnection}
+                disabled={isTestingCarrybee}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-sm inline-flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                {isTestingCarrybee ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Test Carrybee Credentials
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Cloudinary Card */}
         <div className="p-6 bg-white dark:bg-[#121216] border border-stone-200 dark:border-white/10 rounded-sm space-y-4">

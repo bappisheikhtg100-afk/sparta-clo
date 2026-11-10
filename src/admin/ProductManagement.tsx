@@ -70,6 +70,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   const [formColors, setFormColors] = useState<ColorSwatch[]>([
     { name: 'Onyx Black', hex: '#111111', imageIndex: 0 },
   ]);
+  const [formSortOrder, setFormSortOrder] = useState('1');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -85,6 +86,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setFormSizes('S, M, L, XL');
     setFormStock('in-stock');
     setFormStockCount('20');
+    setFormSortOrder((products.length + 1).toString());
     setFormFeaturedOnHome(true);
     setFormImages([]);
     setFormHoverIndex(1);
@@ -106,6 +108,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setFormSizes((p.sizes || []).join(', '));
     setFormStock(p.stock);
     setFormStockCount(p.stockCount !== undefined ? p.stockCount.toString() : '10');
+    setFormSortOrder(p.sortOrder !== undefined ? p.sortOrder.toString() : '1');
     setFormFeaturedOnHome(p.featuredOnHome ?? true);
     setFormImages(p.images || []);
     setFormHoverIndex(p.hoverImageIndex ?? 1);
@@ -252,6 +255,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
         colorImages: Object.keys(colorImagesMap).length > 0 ? colorImagesMap : undefined,
         stock: formStock,
         stockCount: formStockCount ? Number(formStockCount) : 10,
+        sortOrder: formSortOrder ? Number(formSortOrder) : 1,
         featuredOnHome: formFeaturedOnHome,
         images:
           formImages.length > 0
@@ -290,13 +294,15 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     onRefresh();
   };
 
-  const filteredProducts = products.filter((p) => {
-    const matchesSearch =
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.id.toLowerCase().includes(search.toLowerCase());
-    const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
-    return matchesSearch && matchesCat;
-  });
+  const filteredProducts = products
+    .filter((p) => {
+      const matchesSearch =
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.id.toLowerCase().includes(search.toLowerCase());
+      const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
+      return matchesSearch && matchesCat;
+    })
+    .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
 
   const parsedFormSizes = formSizes
     .split(',')
@@ -358,6 +364,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-stone-50 dark:bg-white/[0.02] border-b border-stone-200 dark:border-white/10 text-stone-500 uppercase tracking-wider font-mono">
               <tr>
+                <th className="py-3 px-3 w-14 text-center">Order #</th>
                 <th className="py-3 px-4">Item</th>
                 <th className="py-3 px-4">Category</th>
                 <th className="py-3 px-4">Price</th>
@@ -372,8 +379,15 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
               {filteredProducts.map((product) => {
                 const isPublished = product.is_published ?? true;
                 const isFeatured = product.featuredOnHome ?? true;
+                const isComingSoon = product.stock === 'coming-soon';
+
                 return (
                   <tr key={product.id} className="hover:bg-stone-50 dark:hover:bg-white/[0.02] transition-colors">
+                    <td className="py-3 px-3 text-center">
+                      <span className="inline-flex items-center justify-center w-7 h-6 rounded bg-stone-100 dark:bg-white/10 text-stone-800 dark:text-stone-200 font-mono font-bold text-[11px] border border-stone-200 dark:border-white/10">
+                        #{product.sortOrder ?? 1}
+                      </span>
+                    </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-12 bg-stone-100 dark:bg-zinc-800 rounded-sm overflow-hidden shrink-0 border border-stone-200 dark:border-white/10">
@@ -390,8 +404,13 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                           )}
                         </div>
                         <div>
-                          <div className="font-medium text-stone-900 dark:text-white">
+                          <div className="font-medium text-stone-900 dark:text-white flex items-center gap-1.5">
                             {product.name}
+                            {isComingSoon && (
+                              <span className="px-1.5 py-0.2 bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 rounded text-[9px] uppercase font-bold tracking-wider">
+                                Coming Soon
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-stone-400 font-mono">
                             {product.id}
@@ -412,7 +431,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
                             : product.stock === 'out-of-stock'
                             ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
-                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                            : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 font-bold'
                         }`}
                       >
                         {product.stock.replace('-', ' ')}
@@ -611,6 +630,23 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                     placeholder="15"
                     className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none"
                   />
+                </div>
+
+                <div>
+                  <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                    Display Priority / Sort Order *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formSortOrder}
+                    onChange={(e) => setFormSortOrder(e.target.value)}
+                    placeholder="1 (1 = First on website)"
+                    className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none focus:border-stone-400 font-mono font-medium"
+                  />
+                  <p className="text-[10px] text-stone-400 mt-1">
+                    Lower number shows first on homepage (e.g. 1 = 1st, 2 = 2nd).
+                  </p>
                 </div>
               </div>
 

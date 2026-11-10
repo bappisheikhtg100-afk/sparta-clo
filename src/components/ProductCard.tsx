@@ -84,6 +84,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
         style={{ backgroundColor: product.canvasBg || '#F2F1EE' }}
         className="group/media relative w-full aspect-[3/4] overflow-hidden cursor-pointer border border-stone-200/60 dark:border-zinc-800/80 focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-current"
       >
+        {/* Coming Soon Exclusive Badge */}
+        {product.stock === 'coming-soon' && (
+          <div className="absolute top-2.5 left-2.5 z-10 px-2.5 py-1 bg-black/90 dark:bg-white text-white dark:text-black text-[9px] uppercase tracking-widest font-bold shadow-md border border-white/20 dark:border-black/20 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+            <span>Coming Soon</span>
+          </div>
+        )}
+
         {/* Primary Studio Image */}
         <SmartImage
           src={product.images[primaryIndex]}

@@ -46,6 +46,7 @@ export interface Product {
   imageFit?: 'cover-top' | 'cover-center' | 'contain';
   canvasBg?: string;
   featuredOnHome?: boolean; // Control whether product appears in curated homepage section
+  sortOrder?: number; // Custom display priority/order (1 appears first, 2 second, etc.)
   sizeImages?: Record<string, string>; // Optional size-specific mapping retained for backwards compatibility
 }
 
@@ -85,6 +86,7 @@ export interface OrderReceipt {
   deliveryFee: number;
   total: number;
   paymentMethod: 'Cash on Delivery';
+  courierName?: string;
   whatsappUrl: string;
   summaryText: string;
 }
