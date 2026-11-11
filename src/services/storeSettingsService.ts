@@ -21,6 +21,11 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   freeShippingThreshold: 5000,
   spendSaveThreshold: 3000,
   spendSaveDiscount: 200,
+  metaPixelId: '',
+  isMetaPixelActive: false,
+  googleAnalyticsId: '',
+  isGoogleAnalyticsActive: false,
+  customHeadScripts: '',
 };
 
 export const DEFAULT_COUPONS: Coupon[] = [

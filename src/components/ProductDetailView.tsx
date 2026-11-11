@@ -9,11 +9,13 @@ import {
   Plus,
   Ruler,
   X,
+  Eye,
 } from 'lucide-react';
 import { formatBDT, getDisplayPrice, PRODUCTS, STORE_INFO } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
 import { SmartImage } from './SmartImage';
 import { ProductCard } from './ProductCard';
+import { getRealisticVisitorCount } from '../services/visitorEngine';
 
 export const ProductDetailView: React.FC = () => {
   const { selectedProduct, addToCart, navigate, products } = useStore();
@@ -24,8 +26,34 @@ export const ProductDetailView: React.FC = () => {
   const [validationMsg, setValidationMsg] = useState<string | null>(null);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
+  const [liveVisitors, setLiveVisitors] = useState<number>(() =>
+    selectedProduct ? getRealisticVisitorCount(selectedProduct.id) : 18
+  );
 
   const sizeSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // Organic live visitor counter drift
+  useEffect(() => {
+    if (!selectedProduct) return;
+    const initial = getRealisticVisitorCount(selectedProduct.id);
+    setLiveVisitors(initial);
+
+    // Subtle realistic drift every 8 to 15 seconds (+/- 1-2 people)
+    const interval = setInterval(() => {
+      setLiveVisitors((prev) => {
+        const drift = Math.random() > 0.5 ? 1 : -1;
+        const baseline = getRealisticVisitorCount(selectedProduct.id);
+        const next = prev + drift;
+        // Keep within +/- 4 of the diurnal baseline
+        if (Math.abs(next - baseline) > 4) {
+          return baseline;
+        }
+        return Math.max(3, next);
+      });
+    }, 9500);
+
+    return () => clearInterval(interval);
+  }, [selectedProduct?.id]);
 
   useEffect(() => {
     if (!selectedProduct) return;
@@ -281,7 +309,7 @@ export const ProductDetailView: React.FC = () => {
               {selectedProduct.name}
             </h1>
 
-            <div className="flex items-baseline gap-3 pb-6 border-b border-stone-200 dark:border-zinc-800">
+            <div className="flex items-baseline gap-3 pb-4 border-b border-stone-200 dark:border-zinc-800">
               <span className="font-mono tabular-nums text-xl sm:text-2xl font-medium text-[#111111] dark:text-[#F5F4F0]">
                 {isStartingFrom ? 'From ' : ''}
                 {formatBDT(currentPrice)}
@@ -293,7 +321,22 @@ export const ProductDetailView: React.FC = () => {
               )}
             </div>
 
-            <p className="text-sm sm:text-[15px] text-stone-600 dark:text-zinc-400 leading-[1.75] py-6">
+            {/* Organic Dynamic Visitor Counter Badge */}
+            <div className="flex items-center gap-2 py-3 px-3.5 my-3 bg-stone-100/70 dark:bg-white/[0.03] border border-stone-200/80 dark:border-white/10 rounded-sm">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <Eye className="w-3.5 h-3.5 text-stone-500 dark:text-zinc-400" />
+              <span className="text-xs text-stone-700 dark:text-stone-300 font-sans">
+                <strong className="font-mono font-semibold text-stone-900 dark:text-white tabular-nums">
+                  {liveVisitors}
+                </strong>{' '}
+                people viewing this piece right now
+              </span>
+            </div>
+
+            <p className="text-sm sm:text-[15px] text-stone-600 dark:text-zinc-400 leading-[1.75] py-4">
               {selectedProduct.description}
             </p>
 

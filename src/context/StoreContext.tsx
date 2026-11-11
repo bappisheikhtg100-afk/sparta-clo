@@ -22,6 +22,7 @@ import {
   fetchCoupons,
   updateCoupons,
 } from '../services/storeSettingsService';
+import { initMetaPixel, trackMetaPixelEvent } from '../services/pixelService';
 
 interface StoreContextValue {
   theme: ThemeMode;
@@ -164,6 +165,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     loadSettingsAndCoupons();
   }, [refreshProducts, loadSettingsAndCoupons]);
 
+  // Dynamically initialize Meta Pixel if configured
+  useEffect(() => {
+    if (storeSettings.isMetaPixelActive && storeSettings.metaPixelId) {
+      initMetaPixel(storeSettings.metaPixelId);
+    }
+  }, [storeSettings.isMetaPixelActive, storeSettings.metaPixelId]);
+
   // Real-time synchronization when products are created, edited, or deleted in Admin
   useEffect(() => {
     const handleProductsUpdated = (e: any) => {
@@ -230,6 +238,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const navigate = useCallback((route: RouteView, product: Product | null = null) => {
     if (product !== undefined) {
       setSelectedProduct(product);
+      if (product) {
+        trackMetaPixelEvent('ViewContent', {
+          content_name: product.name,
+          content_ids: [product.id],
+          content_type: 'product',
+          value: product.price,
+          currency: 'BDT',
+        });
+      }
+    }
+    if (route === 'checkout') {
+      trackMetaPixelEvent('InitiateCheckout');
     }
     setCurrentRoute(route);
     setIsMobileMenuOpen(false);
@@ -305,6 +325,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } else {
         pushToast('Added to Bag', `${product.name} · ${size}`);
       }
+
+      // Meta Pixel AddToCart event
+      trackMetaPixelEvent('AddToCart', {
+        content_name: product.name,
+        content_ids: [product.id],
+        content_type: 'product',
+        value: unitPrice * quantity,
+        currency: 'BDT',
+      });
     },
     [pushToast]
   );
@@ -503,6 +532,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setCurrentRoute('order-confirmed');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       pushToast('Order Confirmed', `${orderId} · Cash on Delivery`);
+
+      // Meta Pixel Purchase Event
+      trackMetaPixelEvent('Purchase', {
+        content_name: 'SPARTA Order ' + orderId,
+        content_ids: receipt.items.map((it) => it.productId),
+        content_type: 'product',
+        value: receipt.total,
+        currency: 'BDT',
+        num_items: receipt.items.reduce((acc, it) => acc + it.quantity, 0),
+      });
+
       return receipt;
     },
     [cart, cartSubtotal, totalDiscountAmount, appliedCoupon, storeSettings, pushToast]

@@ -68,6 +68,12 @@ export const CourierSettings: React.FC = () => {
   const [tiktokUrl, setTiktokUrl] = useState(storeSettings.tiktokUrl);
   const [whatsappNumber, setWhatsappNumber] = useState(storeSettings.whatsappNumber);
 
+  // Marketing, Meta Pixel & Google Analytics
+  const [metaPixelId, setMetaPixelId] = useState(storeSettings.metaPixelId || '');
+  const [isMetaPixelActive, setIsMetaPixelActive] = useState(storeSettings.isMetaPixelActive ?? false);
+  const [googleAnalyticsId, setGoogleAnalyticsId] = useState(storeSettings.googleAnalyticsId || '');
+  const [isGoogleAnalyticsActive, setIsGoogleAnalyticsActive] = useState(storeSettings.isGoogleAnalyticsActive ?? false);
+
   const [isSaved, setIsSaved] = useState(false);
 
   // Delivery fee rules
@@ -85,6 +91,10 @@ export const CourierSettings: React.FC = () => {
     setInsideDhakaFee(String(storeSettings.insideDhakaFee || 70));
     setOutsideDhakaFee(String(storeSettings.outsideDhakaFee || 120));
     setFreeShippingThreshold(String(storeSettings.freeShippingThreshold || 5000));
+    setMetaPixelId(storeSettings.metaPixelId || '');
+    setIsMetaPixelActive(storeSettings.isMetaPixelActive ?? false);
+    setGoogleAnalyticsId(storeSettings.googleAnalyticsId || '');
+    setIsGoogleAnalyticsActive(storeSettings.isGoogleAnalyticsActive ?? false);
 
     // Multi-device sync: Load Pathao credentials from Supabase
     syncPathaoCredentialsFromSupabase().then((synced) => {
@@ -116,6 +126,10 @@ export const CourierSettings: React.FC = () => {
       insideDhakaFee: Number(insideDhakaFee) || 70,
       outsideDhakaFee: Number(outsideDhakaFee) || 120,
       freeShippingThreshold: Number(freeShippingThreshold) || 5000,
+      metaPixelId: metaPixelId.trim(),
+      isMetaPixelActive,
+      googleAnalyticsId: googleAnalyticsId.trim(),
+      isGoogleAnalyticsActive,
     });
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2500);
@@ -939,6 +953,78 @@ export const CourierSettings: React.FC = () => {
                 className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
               />
             </div>
+          </div>
+        </div>
+
+        {/* Marketing Tracking: Meta Pixel & Google Tag */}
+        <div className="p-6 bg-white dark:bg-[#121216] border border-blue-200 dark:border-blue-900/50 rounded-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-white/5">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-blue-50 dark:bg-blue-950/40 text-blue-600 rounded">
+                <Share2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-stone-900 dark:text-white">
+                  Marketing Tracking &amp; Meta Pixel (Facebook Ads)
+                </h3>
+                <p className="text-[11px] text-stone-500">
+                  Connect Meta Pixel &amp; Google Analytics to track Page Views, Add to Cart, and Purchases for Facebook Ads campaigns
+                </p>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className={`text-[11px] font-medium ${isMetaPixelActive ? 'text-blue-600' : 'text-stone-400'}`}>
+                {isMetaPixelActive ? 'Meta Pixel Active' : 'Pixel Disabled'}
+              </span>
+              <input
+                type="checkbox"
+                checked={isMetaPixelActive}
+                onChange={(e) => setIsMetaPixelActive(e.target.checked)}
+                className="rounded border-stone-300"
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                Meta Pixel ID (Facebook Pixel)
+              </label>
+              <input
+                type="text"
+                value={metaPixelId}
+                onChange={(e) => setMetaPixelId(e.target.value)}
+                placeholder="e.g. 1827461947264821"
+                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+              />
+              <span className="text-[10px] text-stone-400 mt-1 block">
+                Found in Meta Events Manager &rarr; Data Sources &rarr; Pixel ID. Automatically fires <strong>PageView</strong>, <strong>ViewContent</strong>, <strong>AddToCart</strong>, <strong>InitiateCheckout</strong>, and <strong>Purchase</strong>.
+              </span>
+            </div>
+
+            <div>
+              <label className="block uppercase tracking-wider text-stone-500 font-medium mb-1">
+                Google Analytics Measurement ID (Optional)
+              </label>
+              <input
+                type="text"
+                value={googleAnalyticsId}
+                onChange={(e) => setGoogleAnalyticsId(e.target.value)}
+                placeholder="e.g. G-ABC123XYZ0"
+                className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
+              />
+              <span className="text-[10px] text-stone-400 mt-1 block">
+                Google Analytics 4 (GA4) Web Stream Measurement ID.
+              </span>
+            </div>
+          </div>
+
+          <div className="p-3 bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/30 rounded text-[11px] text-stone-600 dark:text-stone-300 space-y-1">
+            <span className="font-semibold text-blue-900 dark:text-blue-300">How client can connect Pixel:</span>
+            <p>1. Copy Pixel ID from Facebook Ads Business Manager (15-16 digit number).</p>
+            <p>2. Paste into the box above and toggle "Meta Pixel Active".</p>
+            <p>3. Click <strong>"Save Configurations"</strong> below. The pixel will immediately activate across the entire site without writing any code!</p>
           </div>
         </div>
 

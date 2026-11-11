@@ -120,4 +120,10 @@ export interface StoreSettings {
   freeShippingThreshold: number;
   spendSaveThreshold: number; // e.g. ৳3000
   spendSaveDiscount: number; // e.g. ৳300 off
+  // Marketing & Analytics Tracking
+  metaPixelId?: string; // e.g. 123456789012345
+  isMetaPixelActive?: boolean;
+  googleAnalyticsId?: string; // e.g. G-XXXXXXXXXX
+  isGoogleAnalyticsActive?: boolean;
+  customHeadScripts?: string;
 }
