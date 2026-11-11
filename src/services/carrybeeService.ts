@@ -85,10 +85,10 @@ export interface CarrybeeTrackingInfo {
 const STORAGE_KEY_CARRYBEE_CREDS = 'sparta_carrybee_credentials_v1';
 
 export const CARRYBEE_PRODUCTION_DEFAULTS: CarrybeeCredentials = {
-  clientId: 'YOUR_CARRYBEE_CLIENT_ID',
-  clientSecret: 'YOUR_CARRYBEE_CLIENT_SECRET',
-  clientContext: 'YOUR_CARRYBEE_CLIENT_CONTEXT',
-  storeId: '',
+  clientId: 'ae2fce67-a7b6-4749-82ff-7735c6240276',
+  clientSecret: '1164e314-3dc5-461c-8abf-701b7916c360',
+  clientContext: 'MJh6nyloHRUQemOjrJSYwEbdaLFTuX',
+  storeId: '33023',
   isSandbox: false,
 };
 
@@ -96,7 +96,7 @@ export const CARRYBEE_SANDBOX_DEFAULTS: CarrybeeCredentials = {
   clientId: '1a89c1a6-fc68-4395-9c09-628e0d3eaafc',
   clientSecret: '1d7152c9-5b2d-4e4e-9c20-652b93333704',
   clientContext: 'DzJwPsx31WaTbS745XZoBjmQLcNqwK',
-  storeId: '',
+  storeId: '33023',
   isSandbox: true,
 };
 
@@ -105,6 +105,10 @@ export function getStoredCarrybeeCredentials(): CarrybeeCredentials {
     const raw = localStorage.getItem(STORAGE_KEY_CARRYBEE_CREDS);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Auto-correct if placeholder was stored
+      if (parsed.clientId === 'YOUR_CARRYBEE_CLIENT_ID' || !parsed.clientId) {
+        return { ...CARRYBEE_PRODUCTION_DEFAULTS };
+      }
       return {
         ...CARRYBEE_PRODUCTION_DEFAULTS,
         ...parsed,
