@@ -45,10 +45,15 @@ export const CollectionSection: React.FC = () => {
       list = [...list].sort(
         (a, b) => getDisplayPrice(b).price - getDisplayPrice(a).price
       );
+    } else {
+      // 'featured' / default: strictly respect display priority (sortOrder 1 first, 2 second, etc.)
+      list = [...list].sort(
+        (a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999)
+      );
     }
 
     return list;
-  }, [activeCategory, inStockOnly, searchQuery, sortBy]);
+  }, [activeCategory, inStockOnly, searchQuery, sortBy, products]);
 
   return (
     <section

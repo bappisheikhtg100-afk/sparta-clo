@@ -32,6 +32,7 @@ function mapDbRowToProduct(row: any): Product {
     imageFit: row.image_fit ?? undefined,
     canvasBg: row.canvas_bg ?? undefined,
     featuredOnHome: row.featured_on_home !== false && row.featuredOnHome !== false,
+    sortOrder: row.sort_order !== undefined && row.sort_order !== null ? Number(row.sort_order) : (row.sortOrder !== undefined ? Number(row.sortOrder) : 999),
     sizeImages: row.size_images || row.sizeImages || undefined,
   };
 }
@@ -55,6 +56,7 @@ function mapProductToDbRow(product: Product, isPublished = true) {
     sizes: product.sizes || [],
     stock: product.stock || 'in-stock',
     stock_count: product.stockCount ?? 15,
+    sort_order: product.sortOrder !== undefined ? Number(product.sortOrder) : 1,
     image_fit: product.imageFit ?? 'cover-top',
     canvas_bg: product.canvasBg ?? '#F2F1EE',
     featured_on_home: product.featuredOnHome !== false,

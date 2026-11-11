@@ -384,9 +384,29 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                 return (
                   <tr key={product.id} className="hover:bg-stone-50 dark:hover:bg-white/[0.02] transition-colors">
                     <td className="py-3 px-3 text-center">
-                      <span className="inline-flex items-center justify-center w-7 h-6 rounded bg-stone-100 dark:bg-white/10 text-stone-800 dark:text-stone-200 font-mono font-bold text-[11px] border border-stone-200 dark:border-white/10">
-                        #{product.sortOrder ?? 1}
-                      </span>
+                      <input
+                        type="number"
+                        min="1"
+                        aria-label={`Sort order for ${product.name}`}
+                        defaultValue={product.sortOrder ?? 1}
+                        onBlur={async (e) => {
+                          const val = Number(e.target.value);
+                          if (!isNaN(val) && val !== product.sortOrder) {
+                            const updated = { ...product, sortOrder: val };
+                            await upsertProduct(updated, true);
+                            await refreshProducts();
+                            onRefresh();
+                            pushToast('Display Priority Updated', `${product.name} is now priority #${val}`);
+                          }
+                        }}
+                        onKeyDown={async (e) => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        className="w-12 h-7 text-center font-mono font-bold text-xs bg-stone-50 dark:bg-white/10 text-stone-900 dark:text-white border border-stone-300 dark:border-white/20 rounded-xs focus:border-stone-900 dark:focus:border-white outline-none"
+                        title="Edit priority number and press Enter or click away to reorder immediately"
+                      />
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
@@ -407,7 +427,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                           <div className="font-medium text-stone-900 dark:text-white flex items-center gap-1.5">
                             {product.name}
                             {isComingSoon && (
-                              <span className="px-1.5 py-0.2 bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 rounded text-[9px] uppercase font-bold tracking-wider">
+                              <span className="px-1.5 py-0.2 bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 rounded text-[9px] uppercase font-bold tracking-wider animate-pulse">
                                 Coming Soon
                               </span>
                             )}
@@ -424,18 +444,34 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                     <td className="py-3 px-4 font-mono font-medium text-stone-900 dark:text-white">
                       {product.price ? formatBDT(product.price) : 'Tiered'}
                     </td>
+                    {/* Quick Stock & Coming Soon Status Selector */}
                     <td className="py-3 px-4">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium tracking-wide uppercase ${
+                      <select
+                        value={product.stock}
+                        aria-label={`Stock status for ${product.name}`}
+                        onChange={async (e) => {
+                          const newStock = e.target.value as StockStatus;
+                          const updated = { ...product, stock: newStock };
+                          await upsertProduct(updated, true);
+                          await refreshProducts();
+                          onRefresh();
+                          pushToast(
+                            newStock === 'coming-soon' ? 'Marked as Coming Soon' : 'Stock Updated',
+                            `${product.name} set to ${newStock.replace('-', ' ')}`
+                          );
+                        }}
+                        className={`text-[10px] font-medium tracking-wide uppercase px-2 py-1 rounded border outline-none cursor-pointer transition-colors ${
                           product.stock === 'in-stock'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                            : product.stock === 'out-of-stock'
-                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
-                            : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 font-bold'
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-800 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300'
+                            : product.stock === 'coming-soon'
+                            ? 'bg-purple-50 border-purple-300 text-purple-800 dark:bg-purple-950/60 dark:border-purple-800 dark:text-purple-300 font-bold'
+                            : 'bg-rose-50 border-rose-300 text-rose-800 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-300'
                         }`}
                       >
-                        {product.stock.replace('-', ' ')}
-                      </span>
+                        <option value="in-stock">In Stock</option>
+                        <option value="coming-soon">Coming Soon ★</option>
+                        <option value="out-of-stock">Out of Stock</option>
+                      </select>
                     </td>
                     <td className="py-3 px-4 font-mono text-stone-700 dark:text-stone-300">
                       {product.stockCount ?? '15'}
