@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, CheckCircle, Quote } from 'lucide-react';
+import { Star, CheckCircle } from 'lucide-react';
 
 interface ReviewItem {
   id: string;
@@ -11,102 +11,102 @@ interface ReviewItem {
   date: string;
 }
 
-const BENGALI_REVIEWS: ReviewItem[] = [
+const CURATED_REVIEWS: ReviewItem[] = [
   {
     id: 'rev-1',
-    name: 'আসিফুর রহমান',
-    location: 'গুলশান, ঢাকা',
+    name: 'Asifur Rahman',
+    location: 'Gulshan 2, Dhaka',
     rating: 5,
-    comment: 'কাপড়ের জিএসএম এবং কোয়ালিটি সত্যিই অসাধারণ! ড্রপ শোল্ডার ফিটিং একদম মনের মতো হয়েছে।',
-    product: 'Signature Heavyweight Tee',
-    date: '২ দিন আগে',
+    comment: 'The GSM weight and silhouette are truly on another level. Fits effortlessly with that quiet luxury drape.',
+    product: 'Spartan Cable Knit',
+    date: '2 days ago',
   },
   {
     id: 'rev-2',
-    name: 'তানভীর আহমেদ',
-    location: 'জিইসি, চট্টগ্রাম',
+    name: 'Tanvir Ahmed',
+    location: 'GEC Circle, Chattogram',
     rating: 5,
-    comment: 'ক্যাশ অন ডেলিভারিতে মাত্র ২ দিনে পার্সেল পেয়েছি। আনবক্সিং এক্সপেরিয়েন্স আন্তর্জাতিক ব্র্যান্ডের মতো!',
-    product: 'Atelier Tailored Pant',
-    date: '৩ দিন আগে',
+    comment: 'Bhai seriously bolchi, fabric quality pura Zara/Massimo Dutti level! Delivery o matro 2 dine peyechi.',
+    product: 'Spartan Flare Formal',
+    date: '3 days ago',
   },
   {
     id: 'rev-3',
-    name: 'সাদমান সাকিব',
-    location: 'উপশহর, সিলেট',
+    name: 'Sazzadul Islam',
+    location: 'Dhanmondi 27, Dhaka',
     rating: 5,
-    comment: 'পারফিউমের স্মেল দীর্ঘস্থায়ী এবং প্রিমিয়াম। ৮-১০ ঘণ্টা পরেও কাপড়ে দারুণ মিষ্টি সুবাস পাওয়া যায়।',
-    product: 'SPARTA Parfum 100ml',
-    date: '১ দিন আগে',
+    comment: 'Hands down the best bespoke knitwear in Bangladesh. Cash on delivery was seamless and packaging was immaculate.',
+    product: 'Heritage Cable Polo',
+    date: 'Yesterday',
   },
   {
     id: 'rev-4',
-    name: 'রাফসান জামিল',
-    location: 'বোয়ালিয়া, রাজশাহী',
+    name: 'Rafsan Jamil',
+    location: 'Sylhet Sadar, Sylhet',
     rating: 5,
-    comment: 'প্রোডাক্টের স্টিচিং এবং মেটেরিয়াল ফিনিশিং নিখুঁত। সাইজ চার্ট অনুযায়ী ১০০% পারফেক্ট হয়েছে।',
-    product: 'Heavyweight Zip Hoodie',
-    date: '৪ দিন আগে',
+    comment: 'The Spartan Man EDP projection is incredible. Lasts easily over 10+ hours with subtle woody undertones.',
+    product: 'SPARTAN MAN EDP',
+    date: '4 days ago',
   },
   {
     id: 'rev-5',
-    name: 'ফারহান কবির',
-    location: 'উত্তরা সেক্টর ৭, ঢাকা',
+    name: 'Farhan Kabir',
+    location: 'Uttara Sector 7, Dhaka',
     rating: 5,
-    comment: 'স্পার্টার কোয়ালিটি দেখে মুগ্ধ হয়েছি। প্রিমিয়াম প্যাকিং এবং সাথে সাথে ডেলিভারি ট্র্যাকিং আপডেট পেয়েছি।',
-    product: 'Minimalist Sweatshirt',
-    date: 'গতকাল',
+    comment: 'Double-pleated trousers er fall ta osadharon! Sneakers er sathe perfectly drape kore, 10/10 recommendation.',
+    product: 'Spartan Flare Formal',
+    date: '1 day ago',
   },
   {
     id: 'rev-6',
-    name: 'মেহেদী হাসান',
-    location: 'ধানমন্ডি, ঢাকা',
+    name: 'Mahir Faisal',
+    location: 'Banani 11, Dhaka',
     rating: 5,
-    comment: 'ধোয়ার পরেও কাপড়ের রঙ বা ফেব্রিক একটুকুও নষ্ট হয়নি। শতভাগ খাঁটি রিইনফোর্সড কটন।',
-    product: 'Boxy Silhouette Tee',
-    date: '৫ দিন আগে',
+    comment: 'Minimalist craftsmanship done right. Washed it twice already and no shrinkage or collar distortion whatsoever.',
+    product: 'Spartan Cable Knit',
+    date: '5 days ago',
   },
   {
     id: 'rev-7',
-    name: 'জুবায়ের হোসেন',
-    location: 'খালিশপুর, খুলনা',
+    name: 'Zubair Hossain',
+    location: 'Khalishpur, Khulna',
     rating: 5,
-    comment: 'ঢাকার বাইরে ক্যারি বি ও পাঠাও কুরিয়ারে এত ফাস্ট হোম ডেলিভারি পাওয়া অভাবনীয়। ১০ এ ১০!',
-    product: 'Pleated Flare Trouser',
-    date: '৩ দিন আগে',
+    comment: 'Khulna te Pathao express delivery te eto fast doorstep parcel pabo expect kori nai. Pure architectural luxury!',
+    product: 'Spartan Head Cap',
+    date: '3 days ago',
   },
   {
     id: 'rev-8',
-    name: 'তাহমিদ ইসলাম',
-    location: 'চৌহাট্টা, সিলেট',
+    name: 'Tahmid Chowdhury',
+    location: 'Agrabad, Chattogram',
     rating: 5,
-    comment: 'মিনিমালিস্ট ও লাক্সারি ভাইব একসাথে পেতে চাইলে স্পার্টা ক্লো এর বিকল্প নেই। আবার অর্ডার করব।',
-    product: 'Signature Cologne 50ml',
-    date: 'আজকে',
+    comment: 'Vampire Blood perfume ta ekdom niche dark fragrance. Evening wear er jonno unmatched signature scent.',
+    product: 'Spartan Vampired Blood',
+    date: 'Just now',
   },
 ];
 
 export const CustomerReviewsMarquee: React.FC = () => {
   // Duplicate array for infinite seamless looping
-  const duplicatedReviews = [...BENGALI_REVIEWS, ...BENGALI_REVIEWS];
+  const duplicatedReviews = [...CURATED_REVIEWS, ...CURATED_REVIEWS];
 
   return (
     <div className="w-full overflow-hidden py-4 select-none">
       <div className="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-3 px-2">
         <div>
           <span className="text-[11px] font-mono tracking-widest uppercase text-stone-500 dark:text-zinc-400">
-            Verified Customer Feedback · পর্যালোচনা
+            Verified Patron Testimonials · Client Archive
           </span>
           <h3 className="text-xl sm:text-2xl font-display font-light text-[#111111] dark:text-[#F5F4F0] mt-1">
-            গ্রাহকদের বাস্তব অভিজ্ঞতা ও রিভিউ
+            Real Experiences &amp; Editorial Reviews
           </h3>
         </div>
         <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-zinc-400 font-mono">
           <div className="flex text-amber-500">
             {'★'.repeat(5)}
           </div>
-          <span className="font-semibold text-stone-800 dark:text-zinc-200">৪.৯/৫.০</span>
-          <span>(৫০০+ সফল ক্যাশ অন ডেলিভারি)</span>
+          <span className="font-semibold text-stone-800 dark:text-zinc-200">4.9 / 5.0</span>
+          <span>(500+ Verified COD Dispatches)</span>
         </div>
       </div>
 
@@ -128,11 +128,11 @@ export const CustomerReviewsMarquee: React.FC = () => {
                   </div>
                   <div className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium font-mono">
                     <CheckCircle className="w-3 h-3" />
-                    <span>ভেরিফাইড ক্রেতা</span>
+                    <span>Verified Buyer</span>
                   </div>
                 </div>
 
-                {/* Bengali Review Text */}
+                {/* Review Text */}
                 <p className="text-xs sm:text-[13px] text-stone-800 dark:text-zinc-200 leading-relaxed font-sans line-clamp-3">
                   "{rev.comment}"
                 </p>
