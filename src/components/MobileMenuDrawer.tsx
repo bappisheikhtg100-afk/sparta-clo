@@ -14,6 +14,7 @@ export const MobileMenuDrawer: React.FC = () => {
     toggleTheme,
     lastOrder,
     navigate,
+    storeSettings,
   } = useStore();
 
   return (
@@ -145,14 +146,14 @@ export const MobileMenuDrawer: React.FC = () => {
               </div>
 
               <a
-                href={`https://wa.me/${STORE_INFO.whatsappNumber}?text=${encodeURIComponent(
+                href={`https://wa.me/${storeSettings.whatsappNumber || STORE_INFO.whatsappNumber}?text=${encodeURIComponent(
                   'Hello SPARTA Support!'
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full min-h-[48px] border border-stone-300 dark:border-zinc-800 flex items-center justify-between px-4 text-xs font-medium text-[#111111] dark:text-[#F5F4F0]"
               >
-                <span>WhatsApp Concierge · {STORE_INFO.phone}</span>
+                <span>WhatsApp Concierge · {storeSettings.whatsappNumber || STORE_INFO.phone}</span>
                 <ArrowUpRight className="w-4 h-4" />
               </a>
             </div>

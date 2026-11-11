@@ -17,6 +17,8 @@ import { createOrderRecord } from '../services/orderService';
 import {
   DEFAULT_STORE_SETTINGS,
   DEFAULT_COUPONS,
+  getLocalStoreSettings,
+  getLocalCoupons,
   fetchStoreSettings,
   updateStoreSettings,
   fetchCoupons,
@@ -113,21 +115,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [products, setProducts] = useState<Product[]>(() =>
     sortByOrder(getLocalStoredProducts())
   );
-  const [currentRoute, setCurrentRoute] = useState<RouteView>(() => {
-    if (typeof window !== 'undefined' && window.location.hash === '#admin') {
-      return 'admin';
-    }
-    return 'home';
-  });
+  const [currentRoute, setCurrentRoute] = useState<RouteView>('home');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // Settings & Coupons state
-  const [storeSettings, setStoreSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
-  const [coupons, setCoupons] = useState<Coupon[]>(DEFAULT_COUPONS);
+  // Settings & Coupons state with instant local cache loading
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(() => getLocalStoreSettings());
+  const [coupons, setCoupons] = useState<Coupon[]>(() => getLocalCoupons());
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(() => {
     try {
       const raw = localStorage.getItem(APPLIED_COUPON_KEY);
@@ -154,7 +151,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         fetchCoupons(),
       ]);
       setStoreSettings(fetchedSettings);
-      setCoupons(fetchedCoupons);
+      if (fetchedCoupons && fetchedCoupons.length > 0) {
+        setCoupons(fetchedCoupons);
+      }
     } catch {
       // ignore
     }
@@ -182,17 +181,105 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => window.removeEventListener('sparta_products_updated', handleProductsUpdated);
   }, []);
 
+  // Real-time synchronization when Settings or Coupons are updated in Admin
   useEffect(() => {
-    const handleHashChange = () => {
-      if (window.location.hash === '#admin') {
-        setCurrentRoute('admin');
-      } else if (window.location.hash === '#home' || window.location.hash === '') {
-        setCurrentRoute((prev) => (prev === 'admin' ? 'home' : prev));
+    const handleSettingsUpdated = (e: any) => {
+      if (e.detail) {
+        setStoreSettings(e.detail);
       }
     };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    const handleCouponsUpdated = (e: any) => {
+      if (e.detail && Array.isArray(e.detail) && e.detail.length > 0) {
+        setCoupons(e.detail);
+      }
+    };
+    window.addEventListener('sparta_settings_updated', handleSettingsUpdated);
+    window.addEventListener('sparta_coupons_updated', handleCouponsUpdated);
+    return () => {
+      window.removeEventListener('sparta_settings_updated', handleSettingsUpdated);
+      window.removeEventListener('sparta_coupons_updated', handleCouponsUpdated);
+    };
   }, []);
+
+  // Helper to parse deep URL routes for Search Engine Crawlers & Direct Link hits
+  const parseCurrentUrl = useCallback((allProducts: Product[]) => {
+    if (typeof window === 'undefined') return;
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const hash = window.location.hash;
+    const pathname = window.location.pathname;
+
+    // Check if #admin or ?page=admin
+    if (hash === '#admin' || searchParams.get('page') === 'admin') {
+      setCurrentRoute('admin');
+      return;
+    }
+
+    // Check if ?page=checkout
+    if (searchParams.get('page') === 'checkout') {
+      setCurrentRoute('checkout');
+      return;
+    }
+
+    // Check if ?page=order-confirmed
+    if (searchParams.get('page') === 'order-confirmed') {
+      setCurrentRoute('order-confirmed');
+      return;
+    }
+
+    // Check for product deep links: ?product=sparta-001 or #product-sparta-001 or /product/sparta-001
+    let prodId = searchParams.get('product');
+    if (!prodId && hash.startsWith('#product-')) {
+      prodId = hash.replace('#product-', '');
+    }
+    if (!prodId && pathname.includes('/product/')) {
+      prodId = pathname.split('/product/')[1]?.replace(/\/$/, '');
+    }
+
+    if (prodId) {
+      const cleanTarget = prodId.toLowerCase();
+      const match =
+        allProducts.find(
+          (p) => p.id.toLowerCase() === cleanTarget || p.name.toLowerCase().replace(/\s+/g, '-') === cleanTarget
+        ) ||
+        STATIC_PRODUCTS.find(
+          (p) => p.id.toLowerCase() === cleanTarget || p.name.toLowerCase().replace(/\s+/g, '-') === cleanTarget
+        );
+
+      if (match) {
+        setSelectedProduct(match);
+        setCurrentRoute('product');
+        return;
+      }
+    }
+
+    // Collection archive link
+    if (searchParams.get('page') === 'collection' || hash === '#collection') {
+      setCurrentRoute('home');
+      setTimeout(() => {
+        const el = document.getElementById('collection');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+      return;
+    }
+
+    // Default: Home
+    setCurrentRoute('home');
+  }, []);
+
+  // Initial URL parse on boot
+  useEffect(() => {
+    parseCurrentUrl(products);
+  }, [products, parseCurrentUrl]);
+
+  // Back/Forward browser button handler (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      parseCurrentUrl(products);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [products, parseCurrentUrl]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -251,6 +338,39 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (route === 'checkout') {
       trackMetaPixelEvent('InitiateCheckout');
     }
+
+    // Push deep URL to browser history so every product and route has a unique indexable URL
+    if (typeof window !== 'undefined') {
+      const currentUrl = new URL(window.location.href);
+      if (route === 'product' && product) {
+        currentUrl.searchParams.set('product', product.id);
+        currentUrl.searchParams.delete('page');
+        currentUrl.hash = '';
+        window.history.pushState({ route: 'product', productId: product.id }, '', currentUrl.toString());
+      } else if (route === 'checkout') {
+        currentUrl.searchParams.delete('product');
+        currentUrl.searchParams.set('page', 'checkout');
+        currentUrl.hash = '';
+        window.history.pushState({ route: 'checkout' }, '', currentUrl.toString());
+      } else if (route === 'order-confirmed') {
+        currentUrl.searchParams.delete('product');
+        currentUrl.searchParams.set('page', 'order-confirmed');
+        currentUrl.hash = '';
+        window.history.pushState({ route: 'order-confirmed' }, '', currentUrl.toString());
+      } else if (route === 'admin') {
+        currentUrl.searchParams.delete('product');
+        currentUrl.searchParams.delete('page');
+        currentUrl.hash = '#admin';
+        window.history.pushState({ route: 'admin' }, '', currentUrl.toString());
+      } else {
+        // Home
+        currentUrl.searchParams.delete('product');
+        currentUrl.searchParams.delete('page');
+        currentUrl.hash = '';
+        window.history.pushState({ route: 'home' }, '', currentUrl.origin + currentUrl.pathname);
+      }
+    }
+
     setCurrentRoute(route);
     setIsMobileMenuOpen(false);
     setIsCartOpen(false);
@@ -262,6 +382,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsMobileMenuOpen(false);
     setIsCartOpen(false);
     setCurrentRoute('home');
+
+    if (typeof window !== 'undefined') {
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.delete('product');
+      currentUrl.searchParams.set('page', 'collection');
+      currentUrl.hash = '#collection';
+      window.history.pushState({ route: 'home', category: cat }, '', currentUrl.toString());
+    }
+
     window.requestAnimationFrame(() => {
       setTimeout(() => {
         const el = document.getElementById('collection');
@@ -271,6 +400,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }, 60);
     });
   }, []);
+
 
   const addToCart = useCallback(
     (
@@ -397,17 +527,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const applyCoupon = useCallback(
     (inputCode: string): { success: boolean; message: string } => {
-      const code = inputCode.trim().toUpperCase();
-      const match = coupons.find((c) => c.code.toUpperCase() === code && c.isActive);
+      const cleanCode = inputCode.trim().toUpperCase();
+      if (!cleanCode) {
+        return { success: false, message: 'Please enter a promo voucher or coupon code.' };
+      }
+
+      // Fallback to DEFAULT_COUPONS if state is currently empty
+      const activeList = coupons && coupons.length > 0 ? coupons : DEFAULT_COUPONS;
+      const match = activeList.find(
+        (c) => c.code.trim().toUpperCase() === cleanCode && c.isActive
+      );
 
       if (!match) {
-        return { success: false, message: 'Invalid or inactive coupon code.' };
+        return {
+          success: false,
+          message: `Coupon "${cleanCode}" is invalid or expired. Try using SPARTA10 or EID2026.`,
+        };
       }
 
       if (cartSubtotal < match.minOrderAmount) {
         return {
           success: false,
-          message: `Minimum order of ${formatBDT(match.minOrderAmount)} required for this coupon.`,
+          message: `Cart subtotal is ${formatBDT(cartSubtotal)}. Minimum order of ${formatBDT(
+            match.minOrderAmount
+          )} required for ${match.code}.`,
         };
       }
 
@@ -419,10 +562,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       pushToast('Coupon Applied', `${match.code} · ${match.description || 'Discount activated'}`);
-      return { success: true, message: 'Coupon applied successfully!' };
+      return { success: true, message: `Promo code ${match.code} applied successfully!` };
     },
     [coupons, cartSubtotal, pushToast]
   );
+
 
   const removeCoupon = useCallback(() => {
     setAppliedCoupon(null);

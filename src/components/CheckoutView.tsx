@@ -307,7 +307,7 @@ export const CheckoutView: React.FC = () => {
                   </p>
                 </div>
                 <span className="font-mono tabular-nums text-sm font-medium text-[#111111] dark:text-[#F5F4F0]">
-                  {isFreeShipping ? 'Complimentary' : formatBDT(STORE_INFO.insideDhakaFee)}
+                  {isFreeShipping ? 'Complimentary' : formatBDT(storeSettings.insideDhakaFee || STORE_INFO.insideDhakaFee)}
                 </span>
               </button>
 
@@ -329,7 +329,7 @@ export const CheckoutView: React.FC = () => {
                   </p>
                 </div>
                 <span className="font-mono tabular-nums text-sm font-medium text-[#111111] dark:text-[#F5F4F0]">
-                  {isFreeShipping ? 'Complimentary' : formatBDT(STORE_INFO.outsideDhakaFee)}
+                  {isFreeShipping ? 'Complimentary' : formatBDT(storeSettings.outsideDhakaFee || STORE_INFO.outsideDhakaFee)}
                 </span>
               </button>
             </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Truck,
   Shield,
@@ -39,7 +39,7 @@ import { CLOUDINARY_CONFIG } from '../services/cloudinaryService';
 import { useStore } from '../context/StoreContext';
 
 export const CourierSettings: React.FC = () => {
-  const { storeSettings, updateSettings } = useStore();
+  const { storeSettings, updateSettings, pushToast } = useStore();
   const [activeCourierTab, setActiveCourierTab] = useState<'pathao' | 'carrybee'>('pathao');
 
   // Pathao States
@@ -76,25 +76,33 @@ export const CourierSettings: React.FC = () => {
 
   const [isSaved, setIsSaved] = useState(false);
 
-  // Delivery fee rules
+  // Delivery fee rules & Free Delivery Master Switch
+  const [isFreeDeliveryActive, setIsFreeDeliveryActive] = useState(storeSettings.isFreeDeliveryActive ?? false);
   const [insideDhakaFee, setInsideDhakaFee] = useState(String(storeSettings.insideDhakaFee || 70));
   const [outsideDhakaFee, setOutsideDhakaFee] = useState(String(storeSettings.outsideDhakaFee || 120));
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(String(storeSettings.freeShippingThreshold || 5000));
 
+  const hasLoadedInitialSettings = useRef(false);
+
   useEffect(() => {
-    setAnnouncementText(storeSettings.announcementText);
-    setIsAnnouncementActive(storeSettings.isAnnouncementActive);
-    setFacebookUrl(storeSettings.facebookUrl);
-    setInstagramUrl(storeSettings.instagramUrl);
-    setTiktokUrl(storeSettings.tiktokUrl);
-    setWhatsappNumber(storeSettings.whatsappNumber);
-    setInsideDhakaFee(String(storeSettings.insideDhakaFee || 70));
-    setOutsideDhakaFee(String(storeSettings.outsideDhakaFee || 120));
-    setFreeShippingThreshold(String(storeSettings.freeShippingThreshold || 5000));
-    setMetaPixelId(storeSettings.metaPixelId || '');
-    setIsMetaPixelActive(storeSettings.isMetaPixelActive ?? false);
-    setGoogleAnalyticsId(storeSettings.googleAnalyticsId || '');
-    setIsGoogleAnalyticsActive(storeSettings.isGoogleAnalyticsActive ?? false);
+    // Only initialize form fields once on mount to prevent typed input overwrites
+    if (!hasLoadedInitialSettings.current) {
+      setAnnouncementText(storeSettings.announcementText);
+      setIsAnnouncementActive(storeSettings.isAnnouncementActive);
+      setFacebookUrl(storeSettings.facebookUrl);
+      setInstagramUrl(storeSettings.instagramUrl);
+      setTiktokUrl(storeSettings.tiktokUrl);
+      setWhatsappNumber(storeSettings.whatsappNumber);
+      setIsFreeDeliveryActive(storeSettings.isFreeDeliveryActive ?? false);
+      setInsideDhakaFee(String(storeSettings.insideDhakaFee || 70));
+      setOutsideDhakaFee(String(storeSettings.outsideDhakaFee || 120));
+      setFreeShippingThreshold(String(storeSettings.freeShippingThreshold || 5000));
+      setMetaPixelId(storeSettings.metaPixelId || '');
+      setIsMetaPixelActive(storeSettings.isMetaPixelActive ?? false);
+      setGoogleAnalyticsId(storeSettings.googleAnalyticsId || '');
+      setIsGoogleAnalyticsActive(storeSettings.isGoogleAnalyticsActive ?? false);
+      hasLoadedInitialSettings.current = true;
+    }
 
     // Multi-device sync: Load Pathao credentials from Supabase
     syncPathaoCredentialsFromSupabase().then((synced) => {
@@ -115,14 +123,16 @@ export const CourierSettings: React.FC = () => {
     e.preventDefault();
     savePathaoCredentials(creds);
     saveCarrybeeCredentials(carrybeeCreds);
-    await updateSettings({
+
+    const updated = {
       ...storeSettings,
       announcementText,
       isAnnouncementActive,
-      facebookUrl,
-      instagramUrl,
-      tiktokUrl,
-      whatsappNumber,
+      facebookUrl: facebookUrl.trim(),
+      instagramUrl: instagramUrl.trim(),
+      tiktokUrl: tiktokUrl.trim(),
+      whatsappNumber: whatsappNumber.trim(),
+      isFreeDeliveryActive,
       insideDhakaFee: Number(insideDhakaFee) || 70,
       outsideDhakaFee: Number(outsideDhakaFee) || 120,
       freeShippingThreshold: Number(freeShippingThreshold) || 5000,
@@ -130,10 +140,14 @@ export const CourierSettings: React.FC = () => {
       isMetaPixelActive,
       googleAnalyticsId: googleAnalyticsId.trim(),
       isGoogleAnalyticsActive,
-    });
+    };
+
+    await updateSettings(updated);
     setIsSaved(true);
+    pushToast('Configurations Saved Live', 'Social links, delivery rates & announcement updated across storefront');
     setTimeout(() => setIsSaved(false), 2500);
   };
+
 
   const handleTestConnection = async () => {
     setIsTesting(true);
@@ -913,9 +927,27 @@ export const CourierSettings: React.FC = () => {
 
         {/* Delivery Rates */}
         <div className="p-6 bg-white dark:bg-[#121216] border border-stone-200 dark:border-white/10 rounded-sm space-y-4">
-          <h3 className="text-sm font-medium text-stone-900 dark:text-white pb-2 border-b border-stone-100 dark:border-white/5">
-            Storefront Delivery Fee Rules
-          </h3>
+          <div className="flex items-center justify-between pb-2 border-b border-stone-100 dark:border-white/5">
+            <div>
+              <h3 className="text-sm font-medium text-stone-900 dark:text-white">
+                Storefront Delivery Fee Rules
+              </h3>
+              <p className="text-[11px] text-stone-500">
+                Nationwide standard courier rates and promotional free shipping thresholds
+              </p>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer px-3 py-1 bg-stone-100 dark:bg-white/5 border border-stone-200 dark:border-white/10 rounded">
+              <span className={`text-[11px] font-medium ${isFreeDeliveryActive ? 'text-emerald-600' : 'text-stone-700 dark:text-stone-300'}`}>
+                {isFreeDeliveryActive ? 'Free Delivery Active (৳0 Everywhere)' : 'Turn OFF Delivery Fees'}
+              </span>
+              <input
+                type="checkbox"
+                checked={isFreeDeliveryActive}
+                onChange={(e) => setIsFreeDeliveryActive(e.target.checked)}
+                className="rounded border-stone-300"
+              />
+            </label>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>

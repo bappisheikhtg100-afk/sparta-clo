@@ -70,19 +70,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
       }}
       className="flex flex-col min-w-0"
     >
-      {/* Sharp Architectural Gallery Frame with Instant Dual-Image Hover Swap */}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => navigate('product', product)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
+      {/* Sharp Architectural Gallery Frame with Instant Dual-Image Hover Swap & Semantic Crawlable Link */}
+      <a
+        href={`?product=${product.id}`}
+        onClick={(e) => {
+          if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) {
             e.preventDefault();
             navigate('product', product);
           }
         }}
         style={{ backgroundColor: product.canvasBg || '#F2F1EE' }}
-        className="group/media relative w-full aspect-[3/4] overflow-hidden cursor-pointer border border-stone-200/60 dark:border-zinc-800/80 focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-current"
+        className="group/media relative block w-full aspect-[3/4] overflow-hidden cursor-pointer border border-stone-200/60 dark:border-zinc-800/80 focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-current"
+        aria-label={`View details for ${product.name}`}
       >
         {/* Coming Soon Exclusive Badge */}
         {product.stock === 'coming-soon' && (
@@ -119,7 +118,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
         {/* Desktop Slide-Up Quick-Add Size Bar for In-Stock Pieces */}
         {product.stock === 'in-stock' ? (
           <div
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             className="hidden lg:flex flex-col gap-1.5 absolute inset-x-0 bottom-0 p-3 bg-[#FAF9F6]/95 dark:bg-[#0C0C0E]/95 backdrop-blur-md border-t border-stone-200/80 dark:border-zinc-800 translate-y-full opacity-0 group-hover/media:translate-y-0 group-hover/media:opacity-100 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
           >
             <span className="text-[10px] font-medium text-stone-500 dark:text-zinc-400 tracking-wide">
@@ -130,7 +132,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
                 <button
                   key={size}
                   type="button"
-                  onClick={(e) => handleQuickAdd(e, size)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleQuickAdd(e, size);
+                  }}
                   className="min-h-[32px] px-2.5 py-1 text-[11px] font-medium border border-stone-300 dark:border-zinc-700 text-[#111111] dark:text-[#F5F4F0] hover:bg-[#111111] hover:text-[#FAF9F6] hover:border-[#111111] dark:hover:bg-[#F5F4F0] dark:hover:text-[#08080A] dark:hover:border-[#F5F4F0] transition-colors whitespace-nowrap cursor-pointer"
                 >
                   {size}
@@ -146,7 +151,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
             <span className="text-[11px] text-[#111111] dark:text-[#F5F4F0]">→</span>
           </div>
         )}
-      </div>
+      </a>
 
       {/* Editorial Unboxed Product Details */}
       <div className="pt-3.5 flex flex-col gap-1 min-w-0">
@@ -165,13 +170,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
         </div>
 
         <div className="flex items-start justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => navigate('product', product)}
+          <a
+            href={`?product=${product.id}`}
+            onClick={(e) => {
+              if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) {
+                e.preventDefault();
+                navigate('product', product);
+              }
+            }}
             className="text-left text-sm sm:text-[15px] font-medium text-[#111111] dark:text-[#F5F4F0] truncate hover:opacity-70 transition-opacity cursor-pointer"
           >
             {product.name}
-          </button>
+          </a>
+
 
           {/* Interactive Color Swatches */}
           {product.colors && product.colors.length > 1 && (

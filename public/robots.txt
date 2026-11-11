@@ -1,4 +1,10 @@
+# Robots.txt for SPARTA (spartaclo.com)
+# Minimalist Luxury Apparel & Fragrance Bangladesh
+
 User-agent: *
 Allow: /
+Disallow: /#admin
+Disallow: /?page=admin
 
-Sitemap: https://bappisheikhtg100-afk.github.io/sparta-clo/sitemap.xml
+# Google Search Console XML Sitemap
+Sitemap: https://spartaclo.com/sitemap.xml

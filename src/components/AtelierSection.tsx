@@ -8,7 +8,11 @@ import { SmartImage } from './SmartImage';
 import { CustomerReviewsMarquee } from './CustomerReviewsMarquee';
 
 export const AtelierSection: React.FC = () => {
-  const { lastOrder, navigate, jumpToCategory } = useStore();
+  const { lastOrder, navigate, jumpToCategory, storeSettings } = useStore();
+
+  const insideFee = storeSettings.insideDhakaFee || STORE_INFO.insideDhakaFee;
+  const outsideFee = storeSettings.outsideDhakaFee || STORE_INFO.outsideDhakaFee;
+  const freeThreshold = storeSettings.freeShippingThreshold || STORE_INFO.freeShippingThreshold;
 
   const houseCodes = [
     {
@@ -24,13 +28,13 @@ export const AtelierSection: React.FC = () => {
     {
       num: '03.',
       title: 'Cash on Delivery Nationwide',
-      body: `Zero online prepayment friction. Settle your order in cash upon doorstep arrival anywhere in Bangladesh (${formatBDT(
-        STORE_INFO.insideDhakaFee
-      )} Inside Dhaka · ${formatBDT(
-        STORE_INFO.outsideDhakaFee
-      )} Outside Dhaka · Complimentary over ${formatBDT(
-        STORE_INFO.freeShippingThreshold
-      )}).`,
+      body: storeSettings.isFreeDeliveryActive
+        ? 'Zero online prepayment friction. Enjoy Complimentary Cash on Delivery nationwide upon doorstep arrival anywhere in Bangladesh.'
+        : `Zero online prepayment friction. Settle your order in cash upon doorstep arrival anywhere in Bangladesh (${formatBDT(
+            insideFee
+          )} Inside Dhaka · ${formatBDT(
+            outsideFee
+          )} Outside Dhaka · Complimentary over ${formatBDT(freeThreshold)}).`,
     },
   ];
 

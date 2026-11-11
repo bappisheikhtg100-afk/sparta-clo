@@ -73,7 +73,12 @@ export function saveLocalStoreSettings(settings: StoreSettings): void {
 export function getLocalCoupons(): Coupon[] {
   try {
     const raw = localStorage.getItem(COUPONS_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
   } catch {
     // fallback
   }
@@ -100,8 +105,11 @@ export async function fetchStoreSettings(): Promise<StoreSettings> {
       .maybeSingle();
 
     if (!error && data?.setting_value) {
-      const merged = { ...DEFAULT_STORE_SETTINGS, ...data.setting_value };
+      const merged: StoreSettings = { ...DEFAULT_STORE_SETTINGS, ...data.setting_value };
       saveLocalStoreSettings(merged);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sparta_settings_updated', { detail: merged }));
+      }
       return merged;
     }
   } catch {
@@ -116,12 +124,20 @@ export async function fetchStoreSettings(): Promise<StoreSettings> {
 export async function updateStoreSettings(settings: StoreSettings): Promise<void> {
   saveLocalStoreSettings(settings);
 
+  // Broadcast event across components immediately
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('sparta_settings_updated', { detail: settings }));
+  }
+
   try {
-    await supabase.from('store_settings').upsert({
+    const { error } = await supabase.from('store_settings').upsert({
       setting_key: 'store_configuration',
       setting_value: settings,
       updated_at: new Date().toISOString(),
     });
+    if (error) {
+      console.warn('Notice syncing settings to Supabase:', error.message);
+    }
   } catch (err) {
     console.warn('Could not sync settings to Supabase:', err);
   }
@@ -138,8 +154,11 @@ export async function fetchCoupons(): Promise<Coupon[]> {
       .eq('setting_key', 'active_coupons')
       .maybeSingle();
 
-    if (!error && Array.isArray(data?.setting_value)) {
+    if (!error && Array.isArray(data?.setting_value) && data.setting_value.length > 0) {
       saveLocalCoupons(data.setting_value);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sparta_coupons_updated', { detail: data.setting_value }));
+      }
       return data.setting_value;
     }
   } catch {
@@ -154,13 +173,22 @@ export async function fetchCoupons(): Promise<Coupon[]> {
 export async function updateCoupons(coupons: Coupon[]): Promise<void> {
   saveLocalCoupons(coupons);
 
+  // Broadcast event across components immediately
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('sparta_coupons_updated', { detail: coupons }));
+  }
+
   try {
-    await supabase.from('store_settings').upsert({
+    const { error } = await supabase.from('store_settings').upsert({
       setting_key: 'active_coupons',
       setting_value: coupons,
       updated_at: new Date().toISOString(),
     });
+    if (error) {
+      console.warn('Notice syncing coupons to Supabase:', error.message);
+    }
   } catch (err) {
     console.warn('Could not sync coupons to Supabase:', err);
   }
 }
+

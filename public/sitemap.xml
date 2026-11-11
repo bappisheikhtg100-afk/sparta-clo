@@ -1,21 +1,170 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <!-- Homepage -->
   <url>
-    <loc>https://bappisheikhtg100-afk.github.io/sparta-clo/</loc>
-    <lastmod>2026-11-10</lastmod>
+    <loc>https://spartaclo.com/</loc>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
+
+  <!-- Complete Collection Archive -->
   <url>
-    <loc>https://bappisheikhtg100-afk.github.io/sparta-clo/#collection</loc>
-    <lastmod>2026-11-10</lastmod>
+    <loc>https://spartaclo.com/?page=collection</loc>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    <priority>0.9</priority>
   </url>
+
+  <!-- Product 001: Spartan Cable Knit -->
   <url>
-    <loc>https://bappisheikhtg100-afk.github.io/sparta-clo/#atelier</loc>
-    <lastmod>2026-11-10</lastmod>
+    <loc>https://spartaclo.com/?product=sparta-001</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://spartaclo.com/assets/products/spartan-white.png</image:loc>
+      <image:title>Spartan Cable Knit - Combed Cotton Quarter-Zip</image:title>
+      <image:caption>Signature Spartan Cable Knit with quarter-zip mock collar and embroidered crest.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Product 002: Spartan Flare Formal -->
+  <url>
+    <loc>https://spartaclo.com/?product=sparta-002</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://spartaclo.com/assets/products/flare-black.png</image:loc>
+      <image:title>Spartan Flare Formal - Double-Pleated Trousers</image:title>
+      <image:caption>Classic formal flare trousers with pressed centre crease tailored in Bangladesh.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Product 008: Heritage Cable Polo -->
+  <url>
+    <loc>https://spartaclo.com/?product=sparta-008</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://spartaclo.com/assets/products/polo-navy.png</image:loc>
+      <image:title>Heritage Cable Polo - Open Collar Resort Knit</image:title>
+      <image:caption>Old-money open-collar cable knit polo with contrast ivory tipping.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Product 007: Spartan Female Fragrance -->
+  <url>
+    <loc>https://spartaclo.com/?product=sparta-007</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://spartaclo.com/assets/products/perfume-female-1.png</image:loc>
+      <image:title>Spartan Female - Artisanal Eau de Parfum</image:title>
+      <image:caption>Damask rose, white peony, pink pepper, and ambergris fragrance.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Product 003: SAF1 Low-Top Sneaker -->
+  <url>
+    <loc>https://spartaclo.com/?product=sparta-003</loc>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://spartaclo.com/assets/products/saf1-white.png</image:loc>
+      <image:title>SAF1 - Chalk Leather Low-Top Sneaker</image:title>
+      <image:caption>Minimalist low-top court sneaker in full-grain leather and soft suede.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Product 004: Spartan Head Cap -->
+  <url>
+    <loc>https://spartaclo.com/?product=sparta-004</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://spartaclo.com/assets/products/cap-black.png</image:loc>
+      <image:title>Spartan Head Cap - Heavyweight Twill</image:title>
+      <image:caption>Structured six-panel cap in brushed cotton twill with raised silver embroidery.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Product 005: SPARTAN MAN Fragrance -->
+  <url>
+    <loc>https://spartaclo.com/?product=sparta-005</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://spartaclo.com/assets/products/perfume-man-1.png</image:loc>
+      <image:title>SPARTAN MAN - Masculine Eau de Parfum</image:title>
+      <image:caption>Calabrian bergamot, black pepper, cedarwood, and ambergris fragrance.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Product 006: Spartan Vampired Blood Fragrance -->
+  <url>
+    <loc>https://spartaclo.com/?product=sparta-006</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://spartaclo.com/assets/products/perfume-vampire-1.png</image:loc>
+      <image:title>Spartan Vampired Blood - Noir Fragrance</image:title>
+      <image:caption>Deep blood orange, dark cherry, saffron, and smoky oud fragrance.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Product 009: Signature Oxford Shirt -->
+  <url>
+    <loc>https://spartaclo.com/?product=sparta-009</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://spartaclo.com/assets/products/oxford-white.png</image:loc>
+      <image:title>Signature Oxford Shirt - Combed Cotton</image:title>
+      <image:caption>Crisp tailored button-down Oxford shirt in 100% combed cotton.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Product 010: Denim Shorts -->
+  <url>
+    <loc>https://spartaclo.com/?product=sparta-010</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://spartaclo.com/assets/products/shorts-offwhite.png</image:loc>
+      <image:title>Denim Shorts - 13oz Heavyweight Washed Cotton</image:title>
+      <image:caption>Heavyweight washed denim shorts with classic five-pocket construction.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Product 011: Sparta Army 2025 Sneaker -->
+  <url>
+    <loc>https://spartaclo.com/?product=sparta-011</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://spartaclo.com/assets/products/army-1.png</image:loc>
+      <image:title>Sparta Army 2025 - Low-Profile Court Sneaker</image:title>
+      <image:caption>German trainer-inspired sneaker in chalk calfskin and dove grey suede.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Cash on Delivery Checkout -->
+  <url>
+    <loc>https://spartaclo.com/?page=checkout</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
   </url>
 </urlset>

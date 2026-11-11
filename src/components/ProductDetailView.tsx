@@ -18,7 +18,7 @@ import { ProductCard } from './ProductCard';
 import { getRealisticVisitorCount } from '../services/visitorEngine';
 
 export const ProductDetailView: React.FC = () => {
-  const { selectedProduct, addToCart, navigate, products } = useStore();
+  const { selectedProduct, addToCart, navigate, products, storeSettings } = useStore();
   const [activeImage, setActiveImage] = useState(0);
   const [selectedColor, setSelectedColor] = useState<string | undefined>(undefined);
   const [selectedSize, setSelectedSize] = useState<string>('');
@@ -31,6 +31,80 @@ export const ProductDetailView: React.FC = () => {
   );
 
   const sizeSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // Dynamic SEO Metadata & Schema.org Product Structured Data for Google Search Console
+  useEffect(() => {
+    if (!selectedProduct) return;
+
+    const originalTitle = document.title;
+    const defaultDesc =
+      "SPARTA (SPARTA CLO) is Bangladesh's premier minimalist luxury clothing brand and fragrance house. Shop heavyweight tees, tailored trousers, knitwear, sneakers, and artisanal perfumes with Cash on Delivery nationwide.";
+
+    // 1. Dynamic Page Title
+    document.title = `${selectedProduct.name} — SPARTA | Minimalist Luxury Apparel & Fragrance`;
+
+    // 2. Meta description
+    const metaDesc = document.querySelector('meta[name="description"]');
+    const prodDesc = `${selectedProduct.name} by SPARTA Bangladesh. ${selectedProduct.description} Cash on Delivery nationwide.`;
+    if (metaDesc) metaDesc.setAttribute('content', prodDesc);
+
+    // 3. OpenGraph Tags
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute('content', `${selectedProduct.name} — SPARTA`);
+    const ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) ogDesc.setAttribute('content', prodDesc);
+    const ogUrl = document.querySelector('meta[property="og:url"]');
+    if (ogUrl) ogUrl.setAttribute('content', `https://spartaclo.com/?product=${selectedProduct.id}`);
+
+    // 4. Schema.org Product Structured Data JSON-LD
+    const scriptId = 'sparta-product-schema';
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement('script');
+      script.id = scriptId;
+      script.type = 'application/ld+json';
+      document.head.appendChild(script);
+    }
+
+    const { price } = getDisplayPrice(selectedProduct);
+    const schemaData = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: selectedProduct.name,
+      description: selectedProduct.description,
+      image: selectedProduct.images.map((img) =>
+        img.startsWith('http') ? img : `https://spartaclo.com${img.startsWith('/') ? img : '/' + img}`
+      ),
+      brand: {
+        '@type': 'Brand',
+        name: 'SPARTA',
+      },
+      offers: {
+        '@type': 'Offer',
+        price: price,
+        priceCurrency: 'BDT',
+        availability:
+          selectedProduct.stock === 'in-stock'
+            ? 'https://schema.org/InStock'
+            : selectedProduct.stock === 'coming-soon'
+            ? 'https://schema.org/PreOrder'
+            : 'https://schema.org/OutOfStock',
+        seller: {
+          '@type': 'Organization',
+          name: 'SPARTA Atelier',
+        },
+      },
+    };
+    script.textContent = JSON.stringify(schemaData);
+
+    return () => {
+      document.title = originalTitle;
+      if (metaDesc) metaDesc.setAttribute('content', defaultDesc);
+      if (script && script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    };
+  }, [selectedProduct]);
 
   // Organic live visitor counter drift
   useEffect(() => {
@@ -82,6 +156,7 @@ export const ProductDetailView: React.FC = () => {
       setSelectedSize('');
     }
   }, [selectedProduct]);
+
 
   if (!selectedProduct) {
     return (
@@ -510,13 +585,21 @@ export const ProductDetailView: React.FC = () => {
             {/* Delivery & Craftsmanship Specifications */}
             <div className="mt-8 pt-6 border-t border-stone-200 dark:border-zinc-800 space-y-2 text-xs text-stone-600 dark:text-zinc-400">
               <p>
-                Cash on Delivery nationwide · {formatBDT(STORE_INFO.insideDhakaFee)} Inside Dhaka ·{' '}
-                {formatBDT(STORE_INFO.outsideDhakaFee)} Outside Dhaka
+                {storeSettings.isFreeDeliveryActive ? (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                    Complimentary Cash on Delivery nationwide (All orders)
+                  </span>
+                ) : (
+                  <>
+                    Cash on Delivery nationwide · {formatBDT(storeSettings.insideDhakaFee || STORE_INFO.insideDhakaFee)} Inside Dhaka ·{' '}
+                    {formatBDT(storeSettings.outsideDhakaFee || STORE_INFO.outsideDhakaFee)} Outside Dhaka
+                  </>
+                )}
               </p>
               <p>
                 Complimentary shipping on orders over{' '}
                 <span className="font-mono tabular-nums text-[#111111] dark:text-zinc-200">
-                  {formatBDT(STORE_INFO.freeShippingThreshold)}
+                  {formatBDT(storeSettings.freeShippingThreshold || STORE_INFO.freeShippingThreshold)}
                 </span>
               </p>
             </div>

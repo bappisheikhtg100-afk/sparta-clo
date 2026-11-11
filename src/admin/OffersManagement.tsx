@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Tag,
   Plus,
@@ -15,6 +15,7 @@ import {
 import { Coupon, StoreSettings } from '../types/store';
 import { formatBDT } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
+import { DEFAULT_COUPONS } from '../services/storeSettingsService';
 
 interface OffersManagementProps {
   onRefresh?: () => void;
@@ -27,6 +28,11 @@ export const OffersManagement: React.FC<OffersManagementProps> = () => {
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(storeSettings);
   const [isSaved, setIsSaved] = useState(false);
 
+  // Keep local settings form in sync when storeSettings updates from CourierSettings or Supabase
+  useEffect(() => {
+    setSettingsForm(storeSettings);
+  }, [storeSettings]);
+
   // Coupon modal state
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
   const [couponCode, setCouponCode] = useState('');
@@ -37,7 +43,11 @@ export const OffersManagement: React.FC<OffersManagementProps> = () => {
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updateSettings(settingsForm);
+    const updated = {
+      ...storeSettings,
+      ...settingsForm,
+    };
+    await updateSettings(updated);
     setIsSaved(true);
     pushToast('Offers & Delivery Updated', 'Changes applied across storefront & checkout');
     setTimeout(() => setIsSaved(false), 2500);
@@ -57,7 +67,8 @@ export const OffersManagement: React.FC<OffersManagementProps> = () => {
       description: couponDesc.trim() || undefined,
     };
 
-    const updated = [newCoupon, ...coupons.filter((c) => c.code !== newCoupon.code)];
+    const currentList = coupons.length > 0 ? coupons : DEFAULT_COUPONS;
+    const updated = [newCoupon, ...currentList.filter((c) => c.code !== newCoupon.code)];
     await saveCoupons(updated);
     setIsCouponModalOpen(false);
     setCouponCode('');
@@ -66,17 +77,20 @@ export const OffersManagement: React.FC<OffersManagementProps> = () => {
   };
 
   const handleToggleCouponActive = async (id: string, current: boolean) => {
-    const updated = coupons.map((c) => (c.id === id ? { ...c, isActive: !current } : c));
+    const currentList = coupons.length > 0 ? coupons : DEFAULT_COUPONS;
+    const updated = currentList.map((c) => (c.id === id ? { ...c, isActive: !current } : c));
     await saveCoupons(updated);
   };
 
   const handleDeleteCoupon = async (id: string) => {
     if (window.confirm('Delete this coupon code?')) {
-      const updated = coupons.filter((c) => c.id !== id);
+      const currentList = coupons.length > 0 ? coupons : DEFAULT_COUPONS;
+      const updated = currentList.filter((c) => c.id !== id);
       await saveCoupons(updated);
       pushToast('Coupon Deleted');
     }
   };
+
 
   return (
     <div className="space-y-8 max-w-4xl text-xs">
