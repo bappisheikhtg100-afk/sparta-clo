@@ -113,11 +113,11 @@ export const PATHAO_SANDBOX_DEFAULTS: PathaoCredentials = {
 };
 
 export const PATHAO_PRODUCTION_DEFAULTS: PathaoCredentials = {
-  clientId: 'M7e549Xd2v',
-  clientSecret: 'HkyIjgXODf9GYMK9jiBxUi8mK1fD2auU4iyQns46',
-  username: 'bappisheikhtg100@gmail.com',
-  password: '%SH$w$$vup6AgH3',
-  storeId: 500277, // Best Test Brand (Lalbagh, Dhaka)
+  clientId: 'YOUR_PATHAO_CLIENT_ID',
+  clientSecret: 'YOUR_PATHAO_CLIENT_SECRET',
+  username: 'merchant@spartaclo.com',
+  password: 'YOUR_PATHAO_PASSWORD',
+  storeId: 0,
   isSandbox: false,
 };
 
@@ -126,12 +126,6 @@ export function getStoredPathaoCredentials(): PathaoCredentials {
     const raw = localStorage.getItem(STORAGE_KEY_CREDS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Auto-correct: If user credentials M7e549Xd2v are present with isSandbox=true, switch to false (they are live credentials)
-      if (parsed.clientId === 'M7e549Xd2v' && parsed.isSandbox) {
-        parsed.isSandbox = false;
-        parsed.storeId = parsed.storeId || 500277;
-        localStorage.setItem(STORAGE_KEY_CREDS, JSON.stringify(parsed));
-      }
       return {
         ...PATHAO_PRODUCTION_DEFAULTS,
         ...parsed,
@@ -147,7 +141,7 @@ export function getStoredPathaoCredentials(): PathaoCredentials {
     clientSecret: (import.meta.env.VITE_PATHAO_CLIENT_SECRET as string) || PATHAO_PRODUCTION_DEFAULTS.clientSecret,
     username: (import.meta.env.VITE_PATHAO_USERNAME as string) || PATHAO_PRODUCTION_DEFAULTS.username,
     password: (import.meta.env.VITE_PATHAO_PASSWORD as string) || PATHAO_PRODUCTION_DEFAULTS.password,
-    storeId: 500277,
+    storeId: 0,
     isSandbox: false,
   };
 }

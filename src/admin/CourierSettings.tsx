@@ -774,19 +774,19 @@ export const CourierSettings: React.FC = () => {
             </div>
             <div>
               <span className="block text-stone-500 uppercase text-[10px] tracking-wider mb-1">
-                API Key
+                Upload Preset
               </span>
               <div className="font-mono text-stone-900 dark:text-white p-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 rounded">
-                {CLOUDINARY_CONFIG.apiKey}
+                {CLOUDINARY_CONFIG.uploadPreset}
               </div>
             </div>
             <div>
               <span className="block text-stone-500 uppercase text-[10px] tracking-wider mb-1">
-                Upload Mode
+                Upload Security Mode
               </span>
               <div className="text-emerald-700 dark:text-emerald-400 font-medium p-2 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 rounded flex items-center gap-1.5">
                 <CheckCircle className="w-3.5 h-3.5" />
-                Signed WebCrypto SHA-1
+                Unsigned (Client Safe)
               </div>
             </div>
           </div>

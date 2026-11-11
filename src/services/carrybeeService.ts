@@ -85,10 +85,10 @@ export interface CarrybeeTrackingInfo {
 const STORAGE_KEY_CARRYBEE_CREDS = 'sparta_carrybee_credentials_v1';
 
 export const CARRYBEE_PRODUCTION_DEFAULTS: CarrybeeCredentials = {
-  clientId: 'ae2fce67-a7b6-4749-82ff-7735c6240276',
-  clientSecret: '1164e314-3dc5-461c-8abf-701b7916c360',
-  clientContext: 'MJh6nyloHRUQemOjrJSYwEbdaLFTuX',
-  storeId: '33023',
+  clientId: 'YOUR_CARRYBEE_CLIENT_ID',
+  clientSecret: 'YOUR_CARRYBEE_CLIENT_SECRET',
+  clientContext: 'YOUR_CARRYBEE_CLIENT_CONTEXT',
+  storeId: '',
   isSandbox: false,
 };
 
@@ -96,7 +96,7 @@ export const CARRYBEE_SANDBOX_DEFAULTS: CarrybeeCredentials = {
   clientId: '1a89c1a6-fc68-4395-9c09-628e0d3eaafc',
   clientSecret: '1d7152c9-5b2d-4e4e-9c20-652b93333704',
   clientContext: 'DzJwPsx31WaTbS745XZoBjmQLcNqwK',
-  storeId: '33023',
+  storeId: '',
   isSandbox: true,
 };
 
@@ -105,11 +105,6 @@ export function getStoredCarrybeeCredentials(): CarrybeeCredentials {
     const raw = localStorage.getItem(STORAGE_KEY_CARRYBEE_CREDS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Auto-upgrade invalid or legacy storeId '1' to active store 33023
-      if (!parsed.storeId || parsed.storeId === '1' || parsed.storeId === 1) {
-        parsed.storeId = '33023';
-        localStorage.setItem(STORAGE_KEY_CARRYBEE_CREDS, JSON.stringify({ ...CARRYBEE_PRODUCTION_DEFAULTS, ...parsed }));
-      }
       return {
         ...CARRYBEE_PRODUCTION_DEFAULTS,
         ...parsed,

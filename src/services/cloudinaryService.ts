@@ -1,6 +1,7 @@
 /**
- * Cloudinary Direct Upload Service for SPARTA Atelier Admin
- * Uses Web Crypto API for client-side SHA-1 signature calculation during admin sessions
+ * Production-Secure Cloudinary Direct Upload Service for SPARTA Atelier
+ * ZERO API Secret exposed in client-side code.
+ * Uses Cloudinary Unsigned Upload Presets for safe browser-to-cloud uploads.
  */
 
 export interface CloudinaryUploadResponse {
@@ -14,35 +15,24 @@ export interface CloudinaryUploadResponse {
 
 export const CLOUDINARY_CONFIG = {
   cloudName: (import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string) || 'zgk3djqr',
-  apiKey: (import.meta.env.VITE_CLOUDINARY_API_KEY as string) || '583185876679327',
-  apiSecret: (import.meta.env.VITE_CLOUDINARY_API_SECRET as string) || 'ifySovr6bV2Z2-EqYxO2kGlVeyE',
+  uploadPreset: (import.meta.env.VITE_CLOUDINARY_PRESET as string) || 'sparta_unsigned',
   folder: 'sparta-atelier',
 };
 
-async function sha1Hex(str: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str);
-  const hashBuffer = await crypto.subtle.digest('SHA-1', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
+/**
+ * Uploads an image directly to Cloudinary using an unsigned upload preset.
+ * Safe for client-side execution in production.
+ */
 export async function uploadToCloudinary(
   file: File | Blob,
   folder = CLOUDINARY_CONFIG.folder
 ): Promise<string> {
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-
-  // Signature string per Cloudinary rules: sorted params + secret
-  const stringToSign = `folder=${folder}&timestamp=${timestamp}${CLOUDINARY_CONFIG.apiSecret}`;
-  const signature = await sha1Hex(stringToSign);
-
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('api_key', CLOUDINARY_CONFIG.apiKey);
-  formData.append('timestamp', timestamp);
-  formData.append('folder', folder);
-  formData.append('signature', signature);
+  formData.append('upload_preset', CLOUDINARY_CONFIG.uploadPreset);
+  if (folder) {
+    formData.append('folder', folder);
+  }
 
   const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CONFIG.cloudName}/image/upload`;
 
@@ -61,7 +51,7 @@ export async function uploadToCloudinary(
 }
 
 /**
- * Generates an optimized WebP thumbnail URL from any Cloudinary image link
+ * Generates an optimized WebP delivery URL with automatic format and quality transforms
  */
 export function getOptimizedImageUrl(
   url: string,

@@ -38,8 +38,8 @@ jobs:
       - name: Build with GitHub Pages base path
         run: npm run build
         env:
-          # Uses /<repo-name>/ as base path for GitHub Pages
-          VITE_BASE: /${{ github.event.repository.name }}/
+          # For custom domain (spartaclo.com), base path must be root '/'
+          VITE_BASE: /
 
       - name: Copy index.html to 404.html for SPA routing fallback
         run: cp dist/index.html dist/404.html

@@ -1,7 +1,7 @@
 /**
  * Production Authentication Service for SPARTA Atelier Admin
  * Strictly authenticates against Supabase Authentication.
- * No hardcoded demo credentials.
+ * Clears all cached tokens, sessions, and state on sign out.
  */
 
 import { supabase } from '../lib/supabase';
@@ -15,15 +15,21 @@ export interface AdminUser {
 export async function getCurrentAdmin(): Promise<AdminUser | null> {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
-    if (!error && session?.user?.email) {
+    if (!error && session?.user && session.user.email) {
+      const user = session.user;
+      const role =
+        (user.app_metadata?.role ||
+          user.user_metadata?.role ||
+          'super_admin') as AdminUser['role'];
+
       return {
-        id: session.user.id,
-        email: session.user.email,
-        role: 'super_admin',
+        id: user.id,
+        email: user.email!,
+        role,
       };
     }
   } catch (err) {
-    console.warn('Error checking admin session:', err);
+    console.warn('Error verifying admin session:', err);
   }
   return null;
 }
@@ -35,13 +41,20 @@ export async function loginAdmin(email: string, password: string): Promise<Admin
   });
 
   if (error || !data.user || !data.user.email) {
-    throw new Error(error?.message || 'Invalid email or password. Please verify your Supabase credentials.');
+    throw new Error(
+      error?.message || 'Invalid email or password. Please verify your Supabase credentials.'
+    );
   }
+
+  const role =
+    (data.user.app_metadata?.role ||
+      data.user.user_metadata?.role ||
+      'super_admin') as AdminUser['role'];
 
   return {
     id: data.user.id,
     email: data.user.email,
-    role: 'super_admin',
+    role,
   };
 }
 
@@ -50,5 +63,13 @@ export async function logoutAdmin(): Promise<void> {
     await supabase.auth.signOut();
   } catch (err) {
     console.warn('Sign out error:', err);
+  } finally {
+    // Purge cached session tokens and sensitive keys on logout
+    try {
+      localStorage.removeItem('sparta_pathao_token_v2');
+      sessionStorage.clear();
+    } catch {
+      // ignore
+    }
   }
 }
