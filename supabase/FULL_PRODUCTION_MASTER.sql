@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS public.courier_integrations (
   client_secret TEXT,
   username TEXT,
   password TEXT,
-  store_id INT DEFAULT 500277,
+  store_id INT,
   webhook_secret TEXT,
   is_sandbox BOOLEAN DEFAULT false,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -204,7 +204,7 @@ CREATE POLICY "Public read settings" ON public.store_settings
 CREATE POLICY "Authenticated admins manage settings" ON public.store_settings
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- 13. ATOMIC CHECKOUT FUNCTION (GUARANTEES 100% ORDER CREATION INTO DATABASE)
+-- 13. ATOMIC CHECKOUT FUNCTION (GUARANTEES 100% ORDER CREATION + 30-MIN COOLDOWN + INPUT VALIDATION)
 CREATE OR REPLACE FUNCTION public.create_public_checkout_order(
   p_order_number text,
   p_customer_name text,
@@ -225,7 +225,57 @@ AS $$
 DECLARE
   v_order_id uuid;
   v_item jsonb;
+  v_clean_phone text;
+  v_clean_name text;
+  v_recent_created_at timestamptz;
+  v_retry_minutes int;
 BEGIN
+  v_clean_name := trim(coalesce(p_customer_name, ''));
+  v_clean_phone := regexp_replace(coalesce(p_customer_phone, ''), '[^0-9]', '', 'g');
+  IF v_clean_phone LIKE '880%' AND length(v_clean_phone) >= 13 THEN
+    v_clean_phone := substr(v_clean_phone, 3);
+  END IF;
+  IF length(v_clean_phone) = 10 AND v_clean_phone LIKE '1%' THEN
+    v_clean_phone := '0' || v_clean_phone;
+  END IF;
+
+  -- Reject digits inside customer name
+  IF v_clean_name = '' OR length(v_clean_name) < 3 OR v_clean_name ~ '[0-9]' THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'code', 'INVALID_INPUT',
+      'error', 'Customer name cannot contain numbers (0-9) and must be at least 3 letters.'
+    );
+  END IF;
+
+  -- Enforce strict 11-digit Bangladesh mobile number starting with 01[3-9]
+  IF v_clean_phone !~ '^01[3-9][0-9]{8}$' THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'code', 'INVALID_INPUT',
+      'error', 'Mobile number must be exactly 11 digits starting with 01.'
+    );
+  END IF;
+
+  -- Enforce 30-minute cooldown per mobile number
+  SELECT created_at INTO v_recent_created_at
+  FROM public.orders
+  WHERE customer_phone = v_clean_phone
+    AND status <> 'cancelled'
+    AND created_at > (now() - interval '30 minutes')
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  IF v_recent_created_at IS NOT NULL THEN
+    v_retry_minutes := greatest(1, ceil(extract(epoch FROM ((v_recent_created_at + interval '30 minutes') - now())) / 60.0)::int);
+    RETURN jsonb_build_object(
+      'success', false,
+      'code', 'RATE_LIMITED',
+      'retry_after_minutes', v_retry_minutes,
+      'error', format('An order was already placed from this mobile number recently. Please wait %s minute(s) before placing another order.', v_retry_minutes)
+    );
+  END IF;
+
   -- Insert Order
   INSERT INTO public.orders (
     order_number,
@@ -238,11 +288,12 @@ BEGIN
     total,
     payment_method,
     status,
+    courier_name,
     notes
   ) VALUES (
     p_order_number,
-    p_customer_name,
-    p_customer_phone,
+    v_clean_name,
+    v_clean_phone,
     p_shipping_address,
     p_delivery_zone,
     p_subtotal,
@@ -250,6 +301,7 @@ BEGIN
     p_total,
     'Cash on Delivery',
     'pending',
+    'Unassigned',
     p_notes
   ) RETURNING id INTO v_order_id;
 
@@ -280,7 +332,7 @@ BEGIN
 
   -- Upsert Customer Record
   INSERT INTO public.customers (phone, full_name, address, delivery_zone, total_orders, total_spent)
-  VALUES (p_customer_phone, p_customer_name, p_shipping_address, p_delivery_zone, 1, p_total)
+  VALUES (v_clean_phone, v_clean_name, p_shipping_address, p_delivery_zone, 1, p_total)
   ON CONFLICT (phone) DO UPDATE
   SET total_orders = customers.total_orders + 1,
       total_spent = customers.total_spent + EXCLUDED.total_spent,
@@ -380,18 +432,128 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.pathao_proxy(text, text, jsonb, jsonb, boolean) TO anon, authenticated, service_role;
 
--- 15. SEED INITIAL STORE SETTINGS & COURIER CONFIGURATION
-INSERT INTO public.store_settings (setting_key, setting_value)
-VALUES
-  ('shipping_rules', '{"inside_dhaka_fee": 70, "outside_dhaka_fee": 120, "free_shipping_threshold": 5000, "is_delivery_free": false}'::jsonb),
-  ('store_profile', '{"name": "SPARTA", "phone": "+880 1610-046310", "whatsapp": "8801610046310", "email": "sparta.bd.com@gmail.com"}'::jsonb),
-  ('announcement_bar', '{"text": "COMPLIMENTARY SHIPPING NATIONWIDE ON ORDERS OVER ৳5,000 | CASH ON DELIVERY AVAILABLE ACROSS BANGLADESH", "is_active": true}'::jsonb),
-  ('social_links', '{"facebook": "https://facebook.com/sparta.clo", "instagram": "https://www.instagram.com/sparta.clo", "tiktok": "https://www.tiktok.com/@sparta_clo", "whatsapp": "8801610046310"}'::jsonb),
-  ('offers_coupons', '[{"code": "SPARTA10", "discount_type": "percent", "discount_value": 10, "min_order_amount": 2000, "is_active": true, "description": "10% off on orders above 2000 BDT"}]'::jsonb)
-ON CONFLICT (setting_key) DO UPDATE
-SET setting_value = EXCLUDED.setting_value, updated_at = now();
+-- 15. CARRYBEE SERVER-SIDE PROXY FUNCTION (ELIMINATES BROWSER CORS FOR GITHUB PAGES)
+CREATE OR REPLACE FUNCTION public.carrybee_proxy(
+  endpoint text,
+  method text DEFAULT 'GET',
+  headers jsonb DEFAULT '{}'::jsonb,
+  payload jsonb DEFAULT null,
+  is_sandbox boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE
+  base_url text;
+  full_url text;
+  req_headers extensions.http_header[];
+  header_key text;
+  resp extensions.http_response;
+  resp_json jsonb;
+BEGIN
+  IF is_sandbox THEN
+    base_url := 'https://sandbox.carrybee.com';
+  ELSE
+    base_url := 'https://developers.carrybee.com';
+  END IF;
+
+  full_url := base_url || endpoint;
+
+  req_headers := array[
+    extensions.http_header('Accept', 'application/json'),
+    extensions.http_header('Content-Type', 'application/json')
+  ];
+
+  IF headers IS NOT NULL THEN
+    FOR header_key IN SELECT jsonb_object_keys(headers) LOOP
+      req_headers := array_append(req_headers, extensions.http_header(header_key, headers->>header_key));
+    END LOOP;
+  END IF;
+
+  IF upper(method) = 'POST' THEN
+    resp := extensions.http((
+      'POST',
+      full_url,
+      req_headers,
+      'application/json',
+      payload::text
+    )::extensions.http_request);
+  ELSE
+    resp := extensions.http((
+      'GET',
+      full_url,
+      req_headers,
+      null,
+      null
+    )::extensions.http_request);
+  END IF;
+
+  BEGIN
+    resp_json := resp.content::jsonb;
+    RETURN resp_json;
+  EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+      'status', resp.status,
+      'raw_content', resp.content
+    );
+  END;
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object(
+    'error', true,
+    'status', 500,
+    'message', SQLERRM
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.carrybee_proxy(text, text, jsonb, jsonb, boolean) TO anon, authenticated, service_role;
+
+-- 16. CLEAN UP ANY LEGACY PERSONAL PATHAO CREDENTIALS & SEED DEFAULT CONFIG NON-DESTRUCTIVELY
+DELETE FROM public.store_settings
+WHERE setting_key = 'pathao_credentials'
+  AND (
+    md5(coalesce(setting_value->>'clientId', '')) = '840f3ca79da4e0744a4c6bccca685e77'
+    OR md5(coalesce(setting_value->>'username', '')) = '577b99974a43b53feb86dc533e725ad9'
+    OR md5(coalesce(setting_value->>'storeId', '')) = 'a1e0bf7dcea1200a283ff7b7cd3db70d'
+  );
 
 INSERT INTO public.courier_integrations (provider, client_id, store_id, is_sandbox)
-VALUES ('pathao', 'M7e549Xd2v', 500277, false)
+VALUES ('pathao', '', NULL, false)
 ON CONFLICT (provider) DO UPDATE
-SET store_id = 500277, is_sandbox = false;
+SET client_id = CASE WHEN md5(coalesce(courier_integrations.client_id, '')) = '840f3ca79da4e0744a4c6bccca685e77' THEN '' ELSE courier_integrations.client_id END,
+    store_id = CASE WHEN md5(coalesce(courier_integrations.store_id::text, '')) = 'a1e0bf7dcea1200a283ff7b7cd3db70d' THEN NULL ELSE courier_integrations.store_id END;
+
+INSERT INTO public.store_settings (setting_key, setting_value)
+VALUES
+  (
+    'store_configuration',
+    '{
+      "announcementText": "EID ARCHIVE 2026 IS LIVE · CASH ON DELIVERY NATIONWIDE · COMPLIMENTARY SHIPPING OVER ৳5,000 · ARCHITECTURAL LUXURY",
+      "isAnnouncementActive": true,
+      "facebookUrl": "https://facebook.com/sparta.clo",
+      "instagramUrl": "https://www.instagram.com/sparta.clo",
+      "tiktokUrl": "https://www.tiktok.com/@sparta_clo",
+      "whatsappNumber": "8801610046310",
+      "isFreeDeliveryActive": false,
+      "insideDhakaFee": 70,
+      "outsideDhakaFee": 120,
+      "freeShippingThreshold": 5000,
+      "spendSaveThreshold": 3000,
+      "spendSaveDiscount": 200,
+      "metaPixelId": "",
+      "isMetaPixelActive": false,
+      "googleAnalyticsId": "",
+      "isGoogleAnalyticsActive": false,
+      "customHeadScripts": ""
+    }'::jsonb
+  ),
+  (
+    'active_coupons',
+    '[
+      {"id": "c-sparta10", "code": "SPARTA10", "discountType": "percentage", "discountValue": 10, "minOrderAmount": 1500, "isActive": true, "description": "10% off on orders above ৳1,500"},
+      {"id": "c-eid2026", "code": "EID2026", "discountType": "fixed", "discountValue": 250, "minOrderAmount": 2500, "isActive": true, "description": "৳250 flat off on orders above ৳2,500"}
+    ]'::jsonb
+  )
+ON CONFLICT (setting_key) DO NOTHING;

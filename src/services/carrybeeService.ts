@@ -85,10 +85,10 @@ export interface CarrybeeTrackingInfo {
 const STORAGE_KEY_CARRYBEE_CREDS = 'sparta_carrybee_credentials_v1';
 
 export const CARRYBEE_PRODUCTION_DEFAULTS: CarrybeeCredentials = {
-  clientId: 'ae2fce67-a7b6-4749-82ff-7735c6240276',
-  clientSecret: '1164e314-3dc5-461c-8abf-701b7916c360',
-  clientContext: 'MJh6nyloHRUQemOjrJSYwEbdaLFTuX',
-  storeId: '33023',
+  clientId: '0138e545-3482-48a1-a61c-f357e4757df9',
+  clientSecret: '6411c634-217b-4f7b-9d6a-9354278cb4a2',
+  clientContext: 'snPY8jaGonyxSfHYik9EJchM31egWX',
+  storeId: '',
   isSandbox: false,
 };
 
@@ -96,22 +96,33 @@ export const CARRYBEE_SANDBOX_DEFAULTS: CarrybeeCredentials = {
   clientId: '1a89c1a6-fc68-4395-9c09-628e0d3eaafc',
   clientSecret: '1d7152c9-5b2d-4e4e-9c20-652b93333704',
   clientContext: 'DzJwPsx31WaTbS745XZoBjmQLcNqwK',
-  storeId: '33023',
+  storeId: '',
   isSandbox: true,
 };
+
+function isLegacyCarrybeeCreds(creds?: Partial<CarrybeeCredentials> | null): boolean {
+  if (!creds) return false;
+  return (
+    creds.clientId === 'ae2fce67-a7b6-4749-82ff-7735c6240276' ||
+    creds.clientId === 'YOUR_CARRYBEE_CLIENT_ID' ||
+    creds.clientContext === 'MJh6nyloHRUQemOjrJSYwEbdaLFTuX'
+  );
+}
 
 export function getStoredCarrybeeCredentials(): CarrybeeCredentials {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CARRYBEE_CREDS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Auto-correct if placeholder was stored
-      if (parsed.clientId === 'YOUR_CARRYBEE_CLIENT_ID' || !parsed.clientId) {
-        return { ...CARRYBEE_PRODUCTION_DEFAULTS };
+      if (!parsed.clientId || isLegacyCarrybeeCreds(parsed)) {
+        const clean = { ...CARRYBEE_PRODUCTION_DEFAULTS };
+        localStorage.setItem(STORAGE_KEY_CARRYBEE_CREDS, JSON.stringify(clean));
+        return clean;
       }
       return {
         ...CARRYBEE_PRODUCTION_DEFAULTS,
         ...parsed,
+        storeId: parsed.storeId === '33023' ? '' : parsed.storeId,
       };
     }
   } catch {
@@ -127,11 +138,14 @@ export function saveCarrybeeCredentials(creds: CarrybeeCredentials): void {
     // Asynchronously sync to Supabase store_settings so it persists across all admin sessions
     void (async () => {
       try {
-        await supabase.from('store_settings').upsert({
-          setting_key: 'carrybee_credentials',
-          setting_value: creds,
-          updated_at: new Date().toISOString(),
-        });
+        await supabase.from('store_settings').upsert(
+          {
+            setting_key: 'carrybee_credentials',
+            setting_value: creds,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'setting_key' }
+        );
       } catch (err) {
         console.warn('Carrybee Supabase sync notice:', err);
       }
@@ -151,8 +165,17 @@ export async function syncCarrybeeCredentialsFromSupabase(): Promise<CarrybeeCre
 
     if (data?.setting_value && data.setting_value.clientId) {
       const parsed = data.setting_value as CarrybeeCredentials;
-      localStorage.setItem(STORAGE_KEY_CARRYBEE_CREDS, JSON.stringify(parsed));
-      return parsed;
+      if (isLegacyCarrybeeCreds(parsed)) {
+        const clean = { ...CARRYBEE_PRODUCTION_DEFAULTS };
+        saveCarrybeeCredentials(clean);
+        return clean;
+      }
+      const normalized = {
+        ...parsed,
+        storeId: parsed.storeId === '33023' ? '' : parsed.storeId,
+      };
+      localStorage.setItem(STORAGE_KEY_CARRYBEE_CREDS, JSON.stringify(normalized));
+      return normalized;
     }
   } catch (err) {
     console.warn('Could not sync Carrybee credentials from Supabase:', err);
@@ -217,28 +240,72 @@ export async function executeCarrybeeCall<T>(
     return resJson as T;
   }
 
-  // 2. Production: direct fetch with CORS handling
-  const directBase = creds.isSandbox ? 'https://sandbox.carrybee.com' : 'https://developers.carrybee.com';
+  // 2. Production on GitHub Pages (spartaclo.com): Route via Supabase RPC Proxy (`carrybee_proxy`) to prevent CORS blocks
   try {
-    const res = await fetch(`${directBase}${endpoint}`, {
+    const { data, error } = await supabase.rpc('carrybee_proxy', {
+      endpoint,
       method,
-      headers: authHeaders,
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      headers: {
+        'Client-ID': creds.clientId.trim(),
+        'Client-Secret': creds.clientSecret.trim(),
+        'Client-Context': creds.clientContext.trim(),
+        ...(options.headers || {}),
+      },
+      payload: options.body || null,
+      is_sandbox: !!creds.isSandbox,
     });
 
-    const resJson = await res.json().catch(async () => {
-      const txt = await res.text();
-      return { error: true, message: txt };
-    });
-
-    if (!res.ok || resJson.error) {
-      const msg = resJson.message || `Carrybee error (${res.status})`;
-      throw new Error(msg);
+    if (error) {
+      if (error.code === 'PGRST202' || error.message?.includes('carrybee_proxy')) {
+        throw new Error(
+          'GitHub Pages (spartaclo.com)-এ Carrybee API চালানোর জন্য Supabase SQL Editor-এ একবার FULL_PRODUCTION_MASTER.sql স্ক্রিপ্ট Run করুন (carrybee_proxy ফাংশন যোগ করতে হবে)।'
+        );
+      }
+      throw new Error(`Carrybee Proxy Error: ${error.message}`);
     }
 
-    return resJson as T;
+    if (data && typeof data === 'object') {
+      if (data.error === true) {
+        throw new Error(data.message || 'Carrybee API call rejected by gateway');
+      }
+      if (data.status && Number(data.status) >= 400) {
+        throw new Error(data.message || `Carrybee API error (${data.status})`);
+      }
+    }
+
+    return data as T;
   } catch (err: any) {
-    throw new Error(err?.message || 'Carrybee gateway connection failed');
+    if (err?.message?.includes('carrybee_proxy')) {
+      throw err;
+    }
+
+    // Fallback direct fetch (in case CORS is enabled on merchant origin)
+    const directBase = creds.isSandbox ? 'https://sandbox.carrybee.com' : 'https://developers.carrybee.com';
+    try {
+      const res = await fetch(`${directBase}${endpoint}`, {
+        method,
+        headers: authHeaders,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+
+      const resJson = await res.json().catch(async () => {
+        const txt = await res.text();
+        return { error: true, message: txt };
+      });
+
+      if (!res.ok || resJson.error) {
+        const msg = resJson.message || `Carrybee error (${res.status})`;
+        throw new Error(msg);
+      }
+
+      return resJson as T;
+    } catch (directErr: any) {
+      throw new Error(
+        directErr?.message && !directErr.message.includes('Failed to fetch')
+          ? directErr.message
+          : `GitHub Pages-এ ব্রাউজার CORS ব্লকের কারণে Carrybee সরাসরি ব্লক হয়। অনুগ্রহ করে Supabase SQL Editor-এ নতুন FULL_PRODUCTION_MASTER.sql স্ক্রিপ্টটি একবার Run করুন। (${err?.message || 'CORS blocked'})`
+      );
+    }
   }
 }
 
@@ -338,11 +405,11 @@ export async function resolveCarrybeeStoreId(
     console.warn('Could not auto-fetch or auto-provision Carrybee stores:', err);
   }
 
-  if (creds.storeId && creds.storeId.trim()) {
+  if (creds.storeId && creds.storeId.trim() && creds.storeId.trim() !== '33023') {
     return creds.storeId.trim();
   }
 
-  return '33023';
+  throw new Error('Carrybee Pickup Store ID could not be resolved. Please click "Test Carrybee Credentials" in Settings first.');
 }
 
 /**

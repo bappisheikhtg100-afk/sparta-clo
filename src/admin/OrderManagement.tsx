@@ -28,6 +28,10 @@ import {
   CarrybeeTrackingInfo,
   getStoredCarrybeeCredentials,
 } from '../services/carrybeeService';
+import {
+  checkCustomerCourierSuccessRate,
+  CustomerSuccessReport,
+} from '../services/courierSuccessService';
 import { generateA4ShippingLabelsPDF, mapOrderToLabelData } from '../services/labelGenerator';
 import { formatBDT } from '../data/storeData';
 
@@ -54,6 +58,46 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isCarrybeeDispatching, setIsCarrybeeDispatching] = useState(false);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [dispatchSuccess, setDispatchSuccess] = useState<string | null>(null);
+
+  // Customer Success Rate / Fraud Check states
+  const [lookupPhone, setLookupPhone] = useState('');
+  const [isCheckingLookup, setIsCheckingLookup] = useState(false);
+  const [lookupReport, setLookupReport] = useState<CustomerSuccessReport | null>(null);
+  const [modalSuccessReport, setModalSuccessReport] = useState<CustomerSuccessReport | null>(null);
+  const [isCheckingModalCustomer, setIsCheckingModalCustomer] = useState(false);
+
+  const runModalCustomerCheck = async (phone: string) => {
+    setIsCheckingModalCustomer(true);
+    try {
+      const report = await checkCustomerCourierSuccessRate(phone, orders);
+      setModalSuccessReport(report);
+    } catch {
+      setModalSuccessReport(null);
+    } finally {
+      setIsCheckingModalCustomer(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (selectedOrder?.customerPhone) {
+      setModalSuccessReport(null);
+      void runModalCustomerCheck(selectedOrder.customerPhone);
+    } else {
+      setModalSuccessReport(null);
+    }
+  }, [selectedOrder?.id, selectedOrder?.customerPhone]);
+
+  const handleQuickPhoneCheck = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lookupPhone.trim()) return;
+    setIsCheckingLookup(true);
+    try {
+      const report = await checkCustomerCourierSuccessRate(lookupPhone, orders);
+      setLookupReport(report);
+    } finally {
+      setIsCheckingLookup(false);
+    }
+  };
 
   // Status & Courier filtering
   const filteredOrders = orders.filter((o) => {
@@ -193,7 +237,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     try {
       const creds = getStoredCarrybeeCredentials();
       const result = await createCarrybeeOrder({
-        store_id: creds.storeId || '33023',
+        store_id: creds.storeId || undefined,
         merchant_order_id: order.orderNumber,
         recipient_name: order.customerName,
         recipient_phone: order.customerPhone,
@@ -410,6 +454,90 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
             <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2" />
           </div>
         </div>
+      </div>
+
+      {/* Customer Delivery Success Rate Quick Checker */}
+      <div className="p-3.5 bg-white dark:bg-[#121216] border border-stone-200 dark:border-white/10 rounded-sm space-y-3">
+        <form onSubmit={handleQuickPhoneCheck} className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+          <div className="flex items-center gap-2 text-xs font-medium text-stone-700 dark:text-stone-300 shrink-0">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+            <span>Customer Delivery Success Check:</span>
+          </div>
+          <div className="flex flex-1 gap-2 max-w-md">
+            <input
+              type="tel"
+              value={lookupPhone}
+              onChange={(e) => setLookupPhone(e.target.value)}
+              placeholder="Enter 11-digit mobile (e.g. 017XXXXXXXX)"
+              className="flex-1 px-3 py-1.5 text-xs font-mono bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded outline-none focus:border-stone-400"
+            />
+            <button
+              type="submit"
+              disabled={isCheckingLookup || !lookupPhone.trim()}
+              className="px-3.5 py-1.5 bg-[#111111] hover:bg-black dark:bg-white dark:hover:bg-stone-200 text-white dark:text-black text-xs font-medium rounded inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {isCheckingLookup ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+              <span>Check Rate</span>
+            </button>
+          </div>
+          {lookupReport && (
+            <button
+              type="button"
+              onClick={() => setLookupReport(null)}
+              className="text-[11px] text-stone-400 hover:text-stone-700 dark:hover:text-white cursor-pointer self-start sm:self-center"
+            >
+              Clear
+            </button>
+          )}
+        </form>
+
+        {lookupReport && (
+          <div className="p-3 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 rounded text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono font-semibold text-stone-900 dark:text-white">
+                  {lookupReport.phone}
+                </span>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                    lookupReport.riskLevel === 'trusted'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                      : lookupReport.riskLevel === 'moderate'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                      : lookupReport.riskLevel === 'high-risk'
+                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                      : 'bg-stone-200 text-stone-700 dark:bg-white/10 dark:text-stone-300'
+                  }`}
+                >
+                  {lookupReport.riskLabel}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-3 text-[11px] text-stone-500">
+                {lookupReport.breakdown.map((b) => (
+                  <span key={b.provider}>
+                    <strong>{b.provider}:</strong> {b.note}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-4 font-mono shrink-0">
+              <div className="text-center">
+                <div className="text-[10px] text-stone-400 uppercase">Delivered</div>
+                <div className="font-semibold text-emerald-600">{lookupReport.deliveredCount}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-[10px] text-stone-400 uppercase">Cancelled</div>
+                <div className="font-semibold text-rose-600">{lookupReport.cancelledCount}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-[10px] text-stone-400 uppercase">Rate</div>
+                <div className="font-semibold text-stone-900 dark:text-white">
+                  {lookupReport.successRate !== null ? `${lookupReport.successRate}%` : 'N/A'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Orders Table */}
@@ -674,6 +802,69 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Customer Courier Success Rate & Fraud Check Card */}
+              <div className="p-4 bg-stone-50 dark:bg-white/[0.02] border border-stone-200 dark:border-white/10 rounded space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-600 dark:text-stone-300">
+                      Customer Delivery Success Rate
+                    </span>
+                    {modalSuccessReport && (
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                          modalSuccessReport.riskLevel === 'trusted'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : modalSuccessReport.riskLevel === 'moderate'
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                            : modalSuccessReport.riskLevel === 'high-risk'
+                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                            : 'bg-stone-200 text-stone-700 dark:bg-white/10 dark:text-stone-300'
+                        }`}
+                      >
+                        {modalSuccessReport.riskLabel}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => runModalCustomerCheck(selectedOrder.customerPhone)}
+                    disabled={isCheckingModalCustomer}
+                    className="px-2.5 py-1 bg-white dark:bg-black/40 border border-stone-200 dark:border-white/15 rounded text-[11px] font-medium text-stone-700 dark:text-stone-300 inline-flex items-center gap-1.5 cursor-pointer hover:bg-stone-100"
+                  >
+                    {isCheckingModalCustomer && <Loader2 className="w-3 h-3 animate-spin" />}
+                    <span>Refresh Courier Check</span>
+                  </button>
+                </div>
+
+                {isCheckingModalCustomer && !modalSuccessReport ? (
+                  <div className="text-[11px] text-stone-400 flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Checking customer history across connected couriers...</span>
+                  </div>
+                ) : modalSuccessReport ? (
+                  <div className="space-y-1.5 text-[11px]">
+                    <div className="flex flex-wrap gap-4 font-mono text-stone-800 dark:text-stone-200">
+                      <span>Total: <strong>{modalSuccessReport.totalParcels}</strong></span>
+                      <span className="text-emerald-600">Delivered: <strong>{modalSuccessReport.deliveredCount}</strong></span>
+                      <span className="text-rose-600">Cancelled: <strong>{modalSuccessReport.cancelledCount}</strong></span>
+                      <span>
+                        Success Rate:{' '}
+                        <strong>
+                          {modalSuccessReport.successRate !== null ? `${modalSuccessReport.successRate}%` : 'New'}
+                        </strong>
+                      </span>
+                    </div>
+                    <div className="text-stone-500 space-y-0.5">
+                      {modalSuccessReport.breakdown.map((b) => (
+                        <div key={b.provider}>
+                          <strong>{b.provider}:</strong> {b.note}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               {/* Items List */}

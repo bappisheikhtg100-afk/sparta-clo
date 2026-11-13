@@ -72,7 +72,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
     >
       {/* Sharp Architectural Gallery Frame with Instant Dual-Image Hover Swap & Semantic Crawlable Link */}
       <a
-        href={`?product=${product.id}`}
+        href={`/product/${product.id}/`}
         onClick={(e) => {
           if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) {
             e.preventDefault();
@@ -171,7 +171,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
 
         <div className="flex items-start justify-between gap-3">
           <a
-            href={`?product=${product.id}`}
+            href={`/product/${product.id}/`}
             onClick={(e) => {
               if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) {
                 e.preventDefault();

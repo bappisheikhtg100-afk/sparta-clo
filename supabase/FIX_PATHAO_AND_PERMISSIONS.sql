@@ -101,3 +101,82 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.pathao_proxy(text, text, jsonb, jsonb, boolean) TO anon, authenticated, service_role;
+
+-- 4. CREATE SECURE CARRYBEE PROXY FUNCTION
+-- Allows spartaclo.com on GitHub Pages to call Carrybee API v2 without browser CORS blocks
+CREATE OR REPLACE FUNCTION public.carrybee_proxy(
+  endpoint text,
+  method text DEFAULT 'GET',
+  headers jsonb DEFAULT '{}'::jsonb,
+  payload jsonb DEFAULT null,
+  is_sandbox boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE
+  base_url text;
+  full_url text;
+  req_headers extensions.http_header[];
+  header_key text;
+  resp extensions.http_response;
+  resp_json jsonb;
+BEGIN
+  IF is_sandbox THEN
+    base_url := 'https://sandbox.carrybee.com';
+  ELSE
+    base_url := 'https://developers.carrybee.com';
+  END IF;
+
+  full_url := base_url || endpoint;
+
+  req_headers := array[
+    extensions.http_header('Accept', 'application/json'),
+    extensions.http_header('Content-Type', 'application/json')
+  ];
+
+  IF headers IS NOT NULL THEN
+    FOR header_key IN SELECT jsonb_object_keys(headers) LOOP
+      req_headers := array_append(req_headers, extensions.http_header(header_key, headers->>header_key));
+    END LOOP;
+  END IF;
+
+  IF upper(method) = 'POST' THEN
+    resp := extensions.http((
+      'POST',
+      full_url,
+      req_headers,
+      'application/json',
+      payload::text
+    )::extensions.http_request);
+  ELSE
+    resp := extensions.http((
+      'GET',
+      full_url,
+      req_headers,
+      null,
+      null
+    )::extensions.http_request);
+  END IF;
+
+  BEGIN
+    resp_json := resp.content::jsonb;
+    RETURN resp_json;
+  EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+      'status', resp.status,
+      'raw_content', resp.content
+    );
+  END;
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object(
+    'error', true,
+    'status', 500,
+    'message', SQLERRM
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.carrybee_proxy(text, text, jsonb, jsonb, boolean) TO anon, authenticated, service_role;

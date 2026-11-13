@@ -1,6 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Search, User, Phone, MapPin, ShoppingBag, Globe, Building2 } from 'lucide-react';
+import { Search, Building2, ShieldCheck, Loader2 } from 'lucide-react';
 import { AdminOrder } from '../services/orderService';
+import {
+  checkCustomerCourierSuccessRate,
+  CustomerSuccessReport,
+} from '../services/courierSuccessService';
 import { formatBDT } from '../data/storeData';
 
 interface CustomerManagementProps {
@@ -25,6 +29,8 @@ interface CustomerSummary {
   zone: string;
   division: BDKDivision;
   orderCount: number;
+  deliveredCount: number;
+  cancelledCount: number;
   totalSpent: number;
   lastOrderDate: string;
 }
@@ -35,44 +41,29 @@ interface CustomerSummary {
 function resolveDivision(address: string, zone?: string): BDKDivision {
   const text = (address || '').toLowerCase();
 
-  // Chattogram division
   if (
     /chattogram|chittagong|cox'?s\s*bazar|cumilla|comilla|feni|brahmanbaria|chandpur|noakhali|lakshmipur|khagrachhari|rangamati|bandarban/.test(text)
   ) {
     return 'Chattogram';
   }
-
-  // Sylhet division
   if (/sylhet|moulvibazar|moulovibazar|habiganj|sunamganj|sreemangal|beanibazar/.test(text)) {
     return 'Sylhet';
   }
-
-  // Rajshahi division
   if (/rajshahi|bogra|bogura|pabna|sirajganj|naogaon|natore|joypurhat|chapai|nawabganj/.test(text)) {
     return 'Rajshahi';
   }
-
-  // Khulna division
   if (/khulna|jessore|jashore|kushtia|satkhira|bagerhat|chuadanga|jhenaidah|magura|meherpur/.test(text)) {
     return 'Khulna';
   }
-
-  // Barishal division
   if (/barishal|barisal|bhola|patuakhali|pirojpur|barguna|jhalokathi|kuakata/.test(text)) {
     return 'Barishal';
   }
-
-  // Rangpur division
   if (/rangpur|dinajpur|gaibandha|kurigram|lalmonirhat|nilphamari|panchagarh|thakurgaon|saidpur/.test(text)) {
     return 'Rangpur';
   }
-
-  // Mymensingh division
   if (/mymensingh|jamalpur|netrokona|sherpur/.test(text)) {
     return 'Mymensingh';
   }
-
-  // Dhaka division (default if inside dhaka or matches dhaka districts)
   if (
     zone === 'inside-dhaka' ||
     /dhaka|gazipur|narayanganj|tangail|narsingdi|faridpur|manikganj|munshiganj|rajbari|gopalganj|madaripur|shariatpur|kishoreganj|savar|uttara|gulshan|banani|dhanmondi|mirpur|motijheel|keraniganj/.test(text)
@@ -86,6 +77,18 @@ function resolveDivision(address: string, zone?: string): BDKDivision {
 export const CustomerManagement: React.FC<CustomerManagementProps> = ({ orders }) => {
   const [search, setSearch] = useState('');
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  const [checkingPhone, setCheckingPhone] = useState<string | null>(null);
+  const [reports, setReports] = useState<Record<string, CustomerSuccessReport>>({});
+
+  const handleCheckCustomer = async (phone: string) => {
+    setCheckingPhone(phone);
+    try {
+      const report = await checkCustomerCourierSuccessRate(phone, orders);
+      setReports((prev) => ({ ...prev, [phone]: report }));
+    } finally {
+      setCheckingPhone(null);
+    }
+  };
 
   const customers: CustomerSummary[] = useMemo(() => {
     const map = new Map<string, CustomerSummary>();
@@ -94,6 +97,8 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ orders }
       const phone = o.customerPhone.trim();
       const existing = map.get(phone);
       const div = resolveDivision(o.shippingAddress, o.deliveryZone);
+      const isDelivered = o.status === 'delivered' ? 1 : 0;
+      const isCancelled = o.status === 'cancelled' ? 1 : 0;
 
       if (!existing) {
         map.set(phone, {
@@ -103,11 +108,15 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ orders }
           zone: o.deliveryZone,
           division: div,
           orderCount: 1,
+          deliveredCount: isDelivered,
+          cancelledCount: isCancelled,
           totalSpent: o.status !== 'cancelled' ? o.total : 0,
           lastOrderDate: o.createdAt,
         });
       } else {
         existing.orderCount += 1;
+        existing.deliveredCount += isDelivered;
+        existing.cancelledCount += isCancelled;
         if (o.status !== 'cancelled') {
           existing.totalSpent += o.total;
         }
@@ -156,14 +165,13 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ orders }
             Client Directory
           </h2>
           <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-            Registered customer database categorized division-wise with lifetime purchase history.
+            Registered customer database categorized division-wise with courier delivery success rates.
           </p>
         </div>
       </div>
 
       {/* Division Tabs & Search */}
       <div className="space-y-3">
-        {/* Division Filter Badges */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           {divisionsList.map((d) => {
             const count =
@@ -197,7 +205,6 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ orders }
           })}
         </div>
 
-        {/* Search */}
         <div className="relative max-w-md">
           <input
             type="text"
@@ -220,7 +227,7 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ orders }
                 <th className="py-3 px-4">Phone Number</th>
                 <th className="py-3 px-4">Division</th>
                 <th className="py-3 px-4">Delivery Address</th>
-                <th className="py-3 px-4">Orders</th>
+                <th className="py-3 px-4">Success Rate</th>
                 <th className="py-3 px-4">Lifetime Spend</th>
                 <th className="py-3 px-4 text-right">Last Purchase</th>
               </tr>
@@ -246,6 +253,13 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ orders }
                     Other: 'bg-stone-100 text-stone-700 border-stone-200 dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700',
                   };
 
+                  const rep = reports[client.phone];
+                  const localResolved = client.deliveredCount + client.cancelledCount;
+                  const localRate =
+                    localResolved > 0
+                      ? Math.round((client.deliveredCount / localResolved) * 100)
+                      : null;
+
                   return (
                     <tr key={client.phone} className="hover:bg-stone-50 dark:hover:bg-white/[0.02] transition-colors">
                       <td className="py-3 px-4 font-medium text-stone-900 dark:text-white">
@@ -264,11 +278,47 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ orders }
                           {client.division}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-stone-600 dark:text-stone-400 max-w-[280px] truncate">
+                      <td className="py-3 px-4 text-stone-600 dark:text-stone-400 max-w-[240px] truncate">
                         {client.address}
                       </td>
-                      <td className="py-3 px-4 font-mono">
-                        {client.orderCount}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          {rep ? (
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${
+                                rep.riskLevel === 'trusted'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
+                                  : rep.riskLevel === 'moderate'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
+                                  : rep.riskLevel === 'high-risk'
+                                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
+                                  : 'bg-stone-100 text-stone-600 dark:bg-white/10 dark:text-stone-300'
+                              }`}
+                            >
+                              {rep.successRate !== null ? `${rep.successRate}% (${rep.deliveredCount}/${rep.deliveredCount + rep.cancelledCount})` : 'New'}
+                            </span>
+                          ) : localRate !== null ? (
+                            <span className="font-mono text-[11px] font-semibold text-stone-800 dark:text-stone-200">
+                              {localRate}% ({client.deliveredCount}/{localResolved})
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-stone-400">{client.orderCount} pending</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleCheckCustomer(client.phone)}
+                            disabled={checkingPhone === client.phone}
+                            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 dark:bg-white/10 dark:hover:bg-white/20 rounded text-[10px] font-medium text-stone-700 dark:text-stone-200 inline-flex items-center gap-1 cursor-pointer"
+                            title="Verify via Courier API"
+                          >
+                            {checkingPhone === client.phone ? (
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            ) : (
+                              <ShieldCheck className="w-2.5 h-2.5" />
+                            )}
+                            <span>Check</span>
+                          </button>
+                        </div>
                       </td>
                       <td className="py-3 px-4 font-mono font-medium text-stone-900 dark:text-white">
                         {formatBDT(client.totalSpent)}

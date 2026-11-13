@@ -47,9 +47,13 @@ export const OffersManagement: React.FC<OffersManagementProps> = () => {
       ...storeSettings,
       ...settingsForm,
     };
-    await updateSettings(updated);
+    const res = await updateSettings(updated);
     setIsSaved(true);
-    pushToast('Offers & Delivery Updated', 'Changes applied across storefront & checkout');
+    if (res.ok) {
+      pushToast('Offers & Delivery Updated', 'Changes saved to Supabase & active across checkout');
+    } else {
+      pushToast('Saved Locally (Database Sync Notice)', res.error || 'Verify Supabase permissions SQL');
+    }
     setTimeout(() => setIsSaved(false), 2500);
   };
 
@@ -69,25 +73,32 @@ export const OffersManagement: React.FC<OffersManagementProps> = () => {
 
     const currentList = coupons.length > 0 ? coupons : DEFAULT_COUPONS;
     const updated = [newCoupon, ...currentList.filter((c) => c.code !== newCoupon.code)];
-    await saveCoupons(updated);
+    const res = await saveCoupons(updated);
     setIsCouponModalOpen(false);
     setCouponCode('');
     setCouponDesc('');
-    pushToast('Coupon Created', `${newCoupon.code} is now active`);
+    if (res.ok) {
+      pushToast('Coupon Created', `${newCoupon.code} is now active in database`);
+    } else {
+      pushToast('Coupon Created Locally', res.error || 'Database sync notice');
+    }
   };
 
   const handleToggleCouponActive = async (id: string, current: boolean) => {
     const currentList = coupons.length > 0 ? coupons : DEFAULT_COUPONS;
     const updated = currentList.map((c) => (c.id === id ? { ...c, isActive: !current } : c));
-    await saveCoupons(updated);
+    const res = await saveCoupons(updated);
+    if (!res.ok) {
+      pushToast('Sync Notice', res.error || 'Could not update coupon in database');
+    }
   };
 
   const handleDeleteCoupon = async (id: string) => {
     if (window.confirm('Delete this coupon code?')) {
       const currentList = coupons.length > 0 ? coupons : DEFAULT_COUPONS;
       const updated = currentList.filter((c) => c.id !== id);
-      await saveCoupons(updated);
-      pushToast('Coupon Deleted');
+      const res = await saveCoupons(updated);
+      pushToast(res.ok ? 'Coupon Deleted' : 'Deleted Locally (Sync Notice)', res.ok ? undefined : res.error);
     }
   };
 

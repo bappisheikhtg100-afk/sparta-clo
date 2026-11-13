@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Minus, Plus, Trash2, Tag, Check, X } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Trash2, Tag, X, Loader2 } from 'lucide-react';
 import { BANGLADESH_DIVISIONS, formatBDT, STORE_INFO } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
 import { DeliveryZone, ShippingDetails } from '../types/store';
+import { normalizeBangladeshPhone } from '../services/pathaoService';
 import { SmartImage } from './SmartImage';
 
 export const CheckoutView: React.FC = () => {
@@ -35,6 +36,7 @@ export const CheckoutView: React.FC = () => {
     deliveryZone: 'inside-dhaka',
   });
   const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (cart.length === 0) {
     return (
@@ -89,33 +91,57 @@ export const CheckoutView: React.FC = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanPhone = form.phone.replace(/[\s-]/g, '');
-    if (cleanPhone.length < 10) {
-      setFormError('Please enter a valid 11-digit Bangladesh mobile number.');
+    if (isSubmitting) return;
+
+    const cleanName = form.fullName.trim();
+    if (/\d/.test(cleanName)) {
+      setFormError('Full Name cannot contain numbers (0–9). Please enter letters only.');
       return;
     }
+    if (cleanName.length < 3 || !/[a-zA-Z\u0980-\u09FF]{2,}/.test(cleanName)) {
+      setFormError('Please enter a valid full name (at least 3 characters).');
+      return;
+    }
+
+    const normalizedPhone = normalizeBangladeshPhone(form.phone);
+    if (!/^01[3-9]\d{8}$/.test(normalizedPhone)) {
+      setFormError('Mobile number must be exactly 11 digits starting with 01 (e.g. 017XXXXXXXX).');
+      return;
+    }
+    if (/^01(\d)\1{8}$/.test(normalizedPhone) || normalizedPhone === '01234567890') {
+      setFormError('Please provide a real, active Bangladesh mobile number.');
+      return;
+    }
+
     if (
-      !form.fullName.trim() ||
       !form.division ||
-      !form.district.trim() ||
-      !form.thana.trim() ||
-      !form.address.trim()
+      form.district.trim().length < 2 ||
+      form.thana.trim().length < 2 ||
+      form.address.trim().length < 6
     ) {
-      setFormError('Please complete all required delivery address fields.');
+      setFormError('Please complete your full delivery address (District, Thana, House/Road).');
       return;
     }
+
     setFormError(null);
-    placeCODOrder({
-      ...form,
-      fullName: form.fullName.trim(),
-      phone: form.phone.trim(),
-      district: form.district.trim(),
-      thana: form.thana.trim(),
-      address: form.address.trim(),
-      notes: form.notes.trim(),
-    });
+    setIsSubmitting(true);
+    try {
+      await placeCODOrder({
+        ...form,
+        fullName: cleanName,
+        phone: normalizedPhone,
+        district: form.district.trim(),
+        thana: form.thana.trim(),
+        address: form.address.trim(),
+        notes: form.notes.trim(),
+      });
+    } catch (err: any) {
+      setFormError(err?.message || 'Unable to place order right now. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const fieldClasses =
@@ -151,7 +177,7 @@ export const CheckoutView: React.FC = () => {
                   htmlFor="cod-name"
                   className="block text-xs text-stone-500 dark:text-zinc-400"
                 >
-                  Full Name *
+                  Full Name * (Letters only)
                 </label>
                 <input
                   id="cod-name"
@@ -160,7 +186,10 @@ export const CheckoutView: React.FC = () => {
                   autoComplete="name"
                   placeholder="Your full name"
                   value={form.fullName}
-                  onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+                  onChange={(e) => {
+                    const sanitized = e.target.value.replace(/[0-9]/g, '');
+                    setForm({ ...form, fullName: sanitized });
+                  }}
                   className={fieldClasses}
                 />
               </div>
@@ -170,16 +199,21 @@ export const CheckoutView: React.FC = () => {
                   htmlFor="cod-phone"
                   className="block text-xs text-stone-500 dark:text-zinc-400"
                 >
-                  Mobile Number *
+                  Mobile Number * (11 digits, starts with 01)
                 </label>
                 <input
                   id="cod-phone"
                   required
                   type="tel"
+                  inputMode="numeric"
+                  maxLength={14}
                   autoComplete="tel"
                   placeholder="01XXXXXXXXX"
                   value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  onChange={(e) => {
+                    const cleanDigits = e.target.value.replace(/[^0-9+]/g, '');
+                    setForm({ ...form, phone: cleanDigits });
+                  }}
                   className={`${fieldClasses} font-mono tabular-nums`}
                 />
               </div>
@@ -367,9 +401,17 @@ export const CheckoutView: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full min-h-[54px] px-8 py-4 bg-[#111111] text-[#FAF9F6] dark:bg-[#F5F4F0] dark:text-[#08080A] text-xs sm:text-sm font-medium tracking-wide hover:opacity-85 active:scale-[0.99] transition-all cursor-pointer"
+            disabled={isSubmitting}
+            className="w-full min-h-[54px] px-8 py-4 bg-[#111111] text-[#FAF9F6] dark:bg-[#F5F4F0] dark:text-[#08080A] text-xs sm:text-sm font-medium tracking-wide hover:opacity-85 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
           >
-            Place Cash on Delivery Order · {formatBDT(totalPayable)}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Verifying &amp; Placing Order...</span>
+              </>
+            ) : (
+              <span>Place Cash on Delivery Order · {formatBDT(totalPayable)}</span>
+            )}
           </button>
         </form>
 

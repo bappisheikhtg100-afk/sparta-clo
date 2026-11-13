@@ -118,10 +118,15 @@ export async function fetchStoreSettings(): Promise<StoreSettings> {
   return getLocalStoreSettings();
 }
 
+export interface SettingsSaveResult {
+  ok: boolean;
+  error?: string;
+}
+
 /**
  * Persist store settings to Supabase and local cache
  */
-export async function updateStoreSettings(settings: StoreSettings): Promise<void> {
+export async function updateStoreSettings(settings: StoreSettings): Promise<SettingsSaveResult> {
   saveLocalStoreSettings(settings);
 
   // Broadcast event across components immediately
@@ -130,16 +135,22 @@ export async function updateStoreSettings(settings: StoreSettings): Promise<void
   }
 
   try {
-    const { error } = await supabase.from('store_settings').upsert({
-      setting_key: 'store_configuration',
-      setting_value: settings,
-      updated_at: new Date().toISOString(),
-    });
+    const { error } = await supabase.from('store_settings').upsert(
+      {
+        setting_key: 'store_configuration',
+        setting_value: settings,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'setting_key' }
+    );
     if (error) {
       console.warn('Notice syncing settings to Supabase:', error.message);
+      return { ok: false, error: error.message };
     }
-  } catch (err) {
+    return { ok: true };
+  } catch (err: any) {
     console.warn('Could not sync settings to Supabase:', err);
+    return { ok: false, error: err?.message || 'Supabase sync failed' };
   }
 }
 
@@ -154,7 +165,7 @@ export async function fetchCoupons(): Promise<Coupon[]> {
       .eq('setting_key', 'active_coupons')
       .maybeSingle();
 
-    if (!error && Array.isArray(data?.setting_value) && data.setting_value.length > 0) {
+    if (!error && data && Array.isArray(data.setting_value)) {
       saveLocalCoupons(data.setting_value);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('sparta_coupons_updated', { detail: data.setting_value }));
@@ -170,7 +181,7 @@ export async function fetchCoupons(): Promise<Coupon[]> {
 /**
  * Persist coupons list to Supabase and local cache
  */
-export async function updateCoupons(coupons: Coupon[]): Promise<void> {
+export async function updateCoupons(coupons: Coupon[]): Promise<SettingsSaveResult> {
   saveLocalCoupons(coupons);
 
   // Broadcast event across components immediately
@@ -179,16 +190,22 @@ export async function updateCoupons(coupons: Coupon[]): Promise<void> {
   }
 
   try {
-    const { error } = await supabase.from('store_settings').upsert({
-      setting_key: 'active_coupons',
-      setting_value: coupons,
-      updated_at: new Date().toISOString(),
-    });
+    const { error } = await supabase.from('store_settings').upsert(
+      {
+        setting_key: 'active_coupons',
+        setting_value: coupons,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'setting_key' }
+    );
     if (error) {
       console.warn('Notice syncing coupons to Supabase:', error.message);
+      return { ok: false, error: error.message };
     }
-  } catch (err) {
+    return { ok: true };
+  } catch (err: any) {
     console.warn('Could not sync coupons to Supabase:', err);
+    return { ok: false, error: err?.message || 'Supabase coupon sync failed' };
   }
 }
 

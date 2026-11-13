@@ -54,7 +54,7 @@ export const ProductDetailView: React.FC = () => {
     const ogDesc = document.querySelector('meta[property="og:description"]');
     if (ogDesc) ogDesc.setAttribute('content', prodDesc);
     const ogUrl = document.querySelector('meta[property="og:url"]');
-    if (ogUrl) ogUrl.setAttribute('content', `https://spartaclo.com/?product=${selectedProduct.id}`);
+    if (ogUrl) ogUrl.setAttribute('content', `https://spartaclo.com/product/${selectedProduct.id}/`);
 
     // 4. Schema.org Product Structured Data JSON-LD
     const scriptId = 'sparta-product-schema';

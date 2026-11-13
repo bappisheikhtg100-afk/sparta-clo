@@ -17,6 +17,7 @@ import { createOrderRecord } from '../services/orderService';
 import {
   DEFAULT_STORE_SETTINGS,
   DEFAULT_COUPONS,
+  SettingsSaveResult,
   getLocalStoreSettings,
   getLocalCoupons,
   fetchStoreSettings,
@@ -24,6 +25,7 @@ import {
   fetchCoupons,
   updateCoupons,
 } from '../services/storeSettingsService';
+import { normalizeBangladeshPhone } from '../services/pathaoService';
 import { initMetaPixel, trackMetaPixelEvent } from '../services/pixelService';
 
 interface StoreContextValue {
@@ -58,14 +60,14 @@ interface StoreContextValue {
   removeFromCart: (cartId: string) => void;
   clearCart: () => void;
   lastOrder: OrderReceipt | null;
-  placeCODOrder: (shipping: ShippingDetails) => OrderReceipt;
+  placeCODOrder: (shipping: ShippingDetails) => Promise<OrderReceipt>;
   toasts: ToastMessage[];
   pushToast: (title: string, subtitle?: string) => void;
   dismissToast: (id: string) => void;
   storeSettings: StoreSettings;
-  updateSettings: (newSettings: StoreSettings) => Promise<void>;
+  updateSettings: (newSettings: StoreSettings) => Promise<SettingsSaveResult>;
   coupons: Coupon[];
-  saveCoupons: (newCoupons: Coupon[]) => Promise<void>;
+  saveCoupons: (newCoupons: Coupon[]) => Promise<SettingsSaveResult>;
   appliedCoupon: Coupon | null;
   applyCoupon: (code: string) => { success: boolean; message: string };
   removeCoupon: () => void;
@@ -77,6 +79,8 @@ const CART_STORAGE_KEY = 'sparta_atelier_cart_v1';
 const THEME_STORAGE_KEY = 'sparta_atelier_theme_v2';
 const ORDER_STORAGE_KEY = 'sparta_atelier_last_order_v1';
 const APPLIED_COUPON_KEY = 'sparta_applied_coupon_v1';
+const ORDER_COOLDOWN_KEY = 'sparta_order_cooldown_v1';
+const ORDER_COOLDOWN_MS = 30 * 60 * 1000;
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -253,8 +257,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
-    // Collection archive link
-    if (searchParams.get('page') === 'collection' || hash === '#collection') {
+    // Collection archive link (?page=collection, #collection, or /collection/)
+    if (
+      searchParams.get('page') === 'collection' ||
+      hash === '#collection' ||
+      pathname.replace(/\/+$/, '').endsWith('/collection')
+    ) {
       setCurrentRoute('home');
       setTimeout(() => {
         const el = document.getElementById('collection');
@@ -271,6 +279,32 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     parseCurrentUrl(products);
   }, [products, parseCurrentUrl]);
+
+  // Dynamic Canonical & OG URL sync for Search Engines (prevents Google treating product pages as duplicates of /)
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    let canonicalPath = '/';
+    if (currentRoute === 'product' && selectedProduct) {
+      canonicalPath = `/product/${selectedProduct.id}/`;
+    } else if (
+      typeof window !== 'undefined' &&
+      (window.location.pathname.includes('/collection') || window.location.search.includes('collection'))
+    ) {
+      canonicalPath = '/collection/';
+    }
+    const canonicalHref = `https://spartaclo.com${canonicalPath}`;
+
+    let canonicalEl = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    if (!canonicalEl) {
+      canonicalEl = document.createElement('link');
+      canonicalEl.rel = 'canonical';
+      document.head.appendChild(canonicalEl);
+    }
+    canonicalEl.href = canonicalHref;
+
+    const ogUrl = document.querySelector('meta[property="og:url"]');
+    if (ogUrl) ogUrl.setAttribute('content', canonicalHref);
+  }, [currentRoute, selectedProduct]);
 
   // Back/Forward browser button handler (popstate)
   useEffect(() => {
@@ -339,35 +373,27 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       trackMetaPixelEvent('InitiateCheckout');
     }
 
-    // Push deep URL to browser history so every product and route has a unique indexable URL
+    // Push clean canonical URLs to browser history so every product & collection has a real indexable URL
     if (typeof window !== 'undefined') {
-      const currentUrl = new URL(window.location.href);
+      const basePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
       if (route === 'product' && product) {
-        currentUrl.searchParams.set('product', product.id);
-        currentUrl.searchParams.delete('page');
-        currentUrl.hash = '';
-        window.history.pushState({ route: 'product', productId: product.id }, '', currentUrl.toString());
+        window.history.pushState(
+          { route: 'product', productId: product.id },
+          '',
+          `${basePath}/product/${product.id}/`
+        );
       } else if (route === 'checkout') {
-        currentUrl.searchParams.delete('product');
-        currentUrl.searchParams.set('page', 'checkout');
-        currentUrl.hash = '';
-        window.history.pushState({ route: 'checkout' }, '', currentUrl.toString());
+        window.history.pushState({ route: 'checkout' }, '', `${basePath}/?page=checkout`);
       } else if (route === 'order-confirmed') {
-        currentUrl.searchParams.delete('product');
-        currentUrl.searchParams.set('page', 'order-confirmed');
-        currentUrl.hash = '';
-        window.history.pushState({ route: 'order-confirmed' }, '', currentUrl.toString());
+        window.history.pushState(
+          { route: 'order-confirmed' },
+          '',
+          `${basePath}/?page=order-confirmed`
+        );
       } else if (route === 'admin') {
-        currentUrl.searchParams.delete('product');
-        currentUrl.searchParams.delete('page');
-        currentUrl.hash = '#admin';
-        window.history.pushState({ route: 'admin' }, '', currentUrl.toString());
+        window.history.pushState({ route: 'admin' }, '', `${basePath}/#admin`);
       } else {
-        // Home
-        currentUrl.searchParams.delete('product');
-        currentUrl.searchParams.delete('page');
-        currentUrl.hash = '';
-        window.history.pushState({ route: 'home' }, '', currentUrl.origin + currentUrl.pathname);
+        window.history.pushState({ route: 'home' }, '', `${basePath}/`);
       }
     }
 
@@ -384,11 +410,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCurrentRoute('home');
 
     if (typeof window !== 'undefined') {
-      const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.delete('product');
-      currentUrl.searchParams.set('page', 'collection');
-      currentUrl.hash = '#collection';
-      window.history.pushState({ route: 'home', category: cat }, '', currentUrl.toString());
+      const basePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+      window.history.pushState(
+        { route: 'home', category: cat },
+        '',
+        `${basePath}/collection/#collection`
+      );
     }
 
     window.requestAnimationFrame(() => {
@@ -578,18 +605,60 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     pushToast('Coupon Removed');
   }, [pushToast]);
 
-  const updateSettings = useCallback(async (newSettings: StoreSettings) => {
+  const updateSettings = useCallback(async (newSettings: StoreSettings): Promise<SettingsSaveResult> => {
     setStoreSettings(newSettings);
-    await updateStoreSettings(newSettings);
+    return await updateStoreSettings(newSettings);
   }, []);
 
-  const saveCoupons = useCallback(async (newCoupons: Coupon[]) => {
+  const saveCoupons = useCallback(async (newCoupons: Coupon[]): Promise<SettingsSaveResult> => {
     setCoupons(newCoupons);
-    await updateCoupons(newCoupons);
+    return await updateCoupons(newCoupons);
   }, []);
 
   const placeCODOrder = useCallback(
-    (shipping: ShippingDetails): OrderReceipt => {
+    async (shipping: ShippingDetails): Promise<OrderReceipt> => {
+      // 1. Strict Anti-Fake Order Validations
+      const cleanName = shipping.fullName.trim();
+      if (/\d/.test(cleanName)) {
+        throw new Error('Customer name cannot contain numbers (0–9). Please enter your real name.');
+      }
+      if (cleanName.length < 3 || !/[a-zA-Z\u0980-\u09FF]{2,}/.test(cleanName)) {
+        throw new Error('Please enter a valid full name (minimum 3 letters).');
+      }
+
+      const normalizedPhone = normalizeBangladeshPhone(shipping.phone);
+      if (!/^01[3-9]\d{8}$/.test(normalizedPhone)) {
+        throw new Error('Mobile number must be exactly 11 digits starting with 01 (e.g. 017XXXXXXXX).');
+      }
+      if (/^01(\d)\1{8}$/.test(normalizedPhone) || normalizedPhone === '01234567890') {
+        throw new Error('Please enter a valid active mobile number.');
+      }
+
+      // 2. Enforce 30-minute per-phone order cooldown (client check + server RPC enforcement)
+      try {
+        const rawCooldown = localStorage.getItem(ORDER_COOLDOWN_KEY);
+        if (rawCooldown) {
+          const map = JSON.parse(rawCooldown) as Record<string, number>;
+          const lastTs = map[normalizedPhone];
+          if (lastTs && Date.now() - lastTs < ORDER_COOLDOWN_MS) {
+            const minsLeft = Math.max(1, Math.ceil((ORDER_COOLDOWN_MS - (Date.now() - lastTs)) / 60000));
+            throw new Error(
+              `This mobile number already placed an order recently. Please wait ${minsLeft} minute${minsLeft > 1 ? 's' : ''} before ordering again.`
+            );
+          }
+        }
+      } catch (cooldownErr: any) {
+        if (cooldownErr?.message?.includes('wait')) {
+          throw cooldownErr;
+        }
+      }
+
+      const sanitizedShipping: ShippingDetails = {
+        ...shipping,
+        fullName: cleanName,
+        phone: normalizedPhone,
+      };
+
       const orderId = `SPT-${Math.floor(100000 + Math.random() * 900000)}`;
 
       // Calculate delivery fee with master switch & thresholds
@@ -598,7 +667,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         deliveryFee = 0;
       } else {
         const baseFee =
-          shipping.deliveryZone === 'inside-dhaka'
+          sanitizedShipping.deliveryZone === 'inside-dhaka'
             ? storeSettings.insideDhakaFee
             : storeSettings.outsideDhakaFee;
         deliveryFee = cartSubtotal >= storeSettings.freeShippingThreshold ? 0 : baseFee;
@@ -612,10 +681,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         `Date: ${new Date().toLocaleString('en-GB')}`,
         ``,
         `*Customer Details:*`,
-        `Name: ${shipping.fullName}`,
-        `Phone: ${shipping.phone}`,
-        `Address: ${shipping.address}, ${shipping.thana}, ${shipping.district}, ${shipping.division}`,
-        shipping.notes ? `Note: ${shipping.notes}` : '',
+        `Name: ${sanitizedShipping.fullName}`,
+        `Phone: ${sanitizedShipping.phone}`,
+        `Address: ${sanitizedShipping.address}, ${sanitizedShipping.thana}, ${sanitizedShipping.district}, ${sanitizedShipping.division}`,
+        sanitizedShipping.notes ? `Note: ${sanitizedShipping.notes}` : '',
         ``,
         `*Items:*`,
         ...cart.map((item) => {
@@ -633,20 +702,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             )}`
           : '',
         `Delivery (${
-          shipping.deliveryZone === 'inside-dhaka' ? 'Inside Dhaka' : 'Outside Dhaka'
+          sanitizedShipping.deliveryZone === 'inside-dhaka' ? 'Inside Dhaka' : 'Outside Dhaka'
         }): ${deliveryFee === 0 ? 'Complimentary' : formatBDT(deliveryFee)}`,
         `*Total Payable on Delivery: ${formatBDT(total)}*`,
       ].filter(Boolean);
 
       const summaryText = lines.join('\n');
-      const whatsappUrl = `https://wa.me/${storeSettings.whatsappNumber || STORE_INFO.whatsappNumber}?text=${encodeURIComponent(
+      const whatsappUrl = `https://wa.me/${(storeSettings.whatsappNumber || STORE_INFO.whatsappNumber).replace(/\D/g, '')}?text=${encodeURIComponent(
         summaryText
       )}`;
 
       const receipt: OrderReceipt = {
         orderId,
         createdAt: new Date().toISOString(),
-        customer: shipping,
+        customer: sanitizedShipping,
         items: [...cart],
         subtotal: cartSubtotal,
         discountAmount: totalDiscountAmount,
@@ -658,23 +727,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         summaryText,
       };
 
+      // Persist to Supabase FIRST (enforces server-side 30-min cooldown & validation before confirming)
+      await createOrderRecord(receipt, sanitizedShipping);
+
+      // Record cooldown timestamp after successful acceptance
+      try {
+        const rawCooldown = localStorage.getItem(ORDER_COOLDOWN_KEY);
+        const map: Record<string, number> = rawCooldown ? JSON.parse(rawCooldown) : {};
+        map[normalizedPhone] = Date.now();
+        localStorage.setItem(ORDER_COOLDOWN_KEY, JSON.stringify(map));
+      } catch {
+        // ignore
+      }
+
       try {
         localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(receipt));
       } catch {
         // ignore
       }
 
-      // Persist to Supabase backend asynchronously
-      createOrderRecord(receipt, shipping).catch((err) => {
-        console.warn('Could not sync order to Supabase:', err);
-      });
-
       setLastOrder(receipt);
       setCart([]);
       setAppliedCoupon(null);
       localStorage.removeItem(APPLIED_COUPON_KEY);
-      setCurrentRoute('order-confirmed');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      navigate('order-confirmed');
       pushToast('Order Confirmed', `${orderId} · Cash on Delivery`);
 
       // Meta Pixel Purchase Event
@@ -689,7 +765,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       return receipt;
     },
-    [cart, cartSubtotal, totalDiscountAmount, appliedCoupon, storeSettings, pushToast]
+    [cart, cartSubtotal, totalDiscountAmount, appliedCoupon, storeSettings, pushToast, navigate]
   );
 
   const value = useMemo(

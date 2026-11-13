@@ -17,6 +17,7 @@ import {
 import {
   getStoredPathaoCredentials,
   savePathaoCredentials,
+  clearPathaoCredentials,
   syncPathaoCredentialsFromSupabase,
   getPathaoAccessToken,
   fetchPathaoStores,
@@ -82,11 +83,13 @@ export const CourierSettings: React.FC = () => {
   const [outsideDhakaFee, setOutsideDhakaFee] = useState(String(storeSettings.outsideDhakaFee || 120));
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(String(storeSettings.freeShippingThreshold || 5000));
 
-  const hasLoadedInitialSettings = useRef(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const lastSyncedJsonRef = useRef<string>('');
 
+  // Sync storeSettings updates from Supabase as long as admin isn't actively editing unsaved fields
   useEffect(() => {
-    // Only initialize form fields once on mount to prevent typed input overwrites
-    if (!hasLoadedInitialSettings.current) {
+    const serialized = JSON.stringify(storeSettings);
+    if (!isDirty && serialized !== lastSyncedJsonRef.current) {
       setAnnouncementText(storeSettings.announcementText);
       setIsAnnouncementActive(storeSettings.isAnnouncementActive);
       setFacebookUrl(storeSettings.facebookUrl);
@@ -94,30 +97,31 @@ export const CourierSettings: React.FC = () => {
       setTiktokUrl(storeSettings.tiktokUrl);
       setWhatsappNumber(storeSettings.whatsappNumber);
       setIsFreeDeliveryActive(storeSettings.isFreeDeliveryActive ?? false);
-      setInsideDhakaFee(String(storeSettings.insideDhakaFee || 70));
-      setOutsideDhakaFee(String(storeSettings.outsideDhakaFee || 120));
-      setFreeShippingThreshold(String(storeSettings.freeShippingThreshold || 5000));
+      setInsideDhakaFee(String(storeSettings.insideDhakaFee ?? 70));
+      setOutsideDhakaFee(String(storeSettings.outsideDhakaFee ?? 120));
+      setFreeShippingThreshold(String(storeSettings.freeShippingThreshold ?? 5000));
       setMetaPixelId(storeSettings.metaPixelId || '');
       setIsMetaPixelActive(storeSettings.isMetaPixelActive ?? false);
       setGoogleAnalyticsId(storeSettings.googleAnalyticsId || '');
       setIsGoogleAnalyticsActive(storeSettings.isGoogleAnalyticsActive ?? false);
-      hasLoadedInitialSettings.current = true;
+      lastSyncedJsonRef.current = serialized;
     }
+  }, [storeSettings, isDirty]);
 
-    // Multi-device sync: Load Pathao credentials from Supabase
+  // Mount-only sync for courier credentials from Supabase
+  useEffect(() => {
     syncPathaoCredentialsFromSupabase().then((synced) => {
-      if (synced && synced.clientId) {
+      if (synced) {
         setCreds(synced);
       }
     });
 
-    // Multi-device sync: Load Carrybee credentials from Supabase
     syncCarrybeeCredentialsFromSupabase().then((synced) => {
       if (synced && synced.clientId) {
         setCarrybeeCreds(synced);
       }
     });
-  }, [storeSettings]);
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,26 +130,35 @@ export const CourierSettings: React.FC = () => {
 
     const updated = {
       ...storeSettings,
-      announcementText,
+      announcementText: announcementText.trim(),
       isAnnouncementActive,
       facebookUrl: facebookUrl.trim(),
       instagramUrl: instagramUrl.trim(),
       tiktokUrl: tiktokUrl.trim(),
       whatsappNumber: whatsappNumber.trim(),
       isFreeDeliveryActive,
-      insideDhakaFee: Number(insideDhakaFee) || 70,
-      outsideDhakaFee: Number(outsideDhakaFee) || 120,
-      freeShippingThreshold: Number(freeShippingThreshold) || 5000,
+      insideDhakaFee: Number(insideDhakaFee) || 0,
+      outsideDhakaFee: Number(outsideDhakaFee) || 0,
+      freeShippingThreshold: Number(freeShippingThreshold) || 0,
       metaPixelId: metaPixelId.trim(),
       isMetaPixelActive,
       googleAnalyticsId: googleAnalyticsId.trim(),
       isGoogleAnalyticsActive,
     };
 
-    await updateSettings(updated);
+    const res = await updateSettings(updated);
+    setIsDirty(false);
+    lastSyncedJsonRef.current = JSON.stringify(updated);
     setIsSaved(true);
-    pushToast('Configurations Saved Live', 'Social links, delivery rates & announcement updated across storefront');
-    setTimeout(() => setIsSaved(false), 2500);
+    if (res.ok) {
+      pushToast('Configurations Saved to Database', 'Social links, topbar, delivery & API settings updated live');
+    } else {
+      pushToast(
+        'Saved Locally (Database Sync Notice)',
+        res.error || 'Please ensure you are signed in and Supabase permissions SQL has been executed.'
+      );
+    }
+    setTimeout(() => setIsSaved(false), 3000);
   };
 
 
@@ -314,21 +327,19 @@ export const CourierSettings: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    const updated = {
-                      ...PATHAO_PRODUCTION_DEFAULTS,
-                      storeId: 500277,
-                      isSandbox: false,
-                    };
-                    setCreds(updated);
-                    savePathaoCredentials(updated);
+                    clearPathaoCredentials();
+                    const cleared = { ...PATHAO_PRODUCTION_DEFAULTS };
+                    setCreds(cleared);
+                    savePathaoCredentials(cleared);
+                    setStores([]);
                     setTestResult({
                       success: true,
-                      message: 'Your Live Pathao credentials loaded (Best Test Brand - Store ID: 500277). Click "Test Pathao Credentials" to verify.',
+                      message: 'Pathao credentials cleared. Enter your merchant Pathao keys and click Save Configurations.',
                     });
                   }}
-                  className="px-2.5 py-1 bg-stone-900 dark:bg-white text-white dark:text-black rounded text-[11px] font-medium transition-colors cursor-pointer"
+                  className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/50 rounded text-[11px] font-medium transition-colors cursor-pointer"
                 >
-                  Load My Live Credentials
+                  Clear Credentials
                 </button>
 
                 <button
@@ -363,7 +374,7 @@ export const CourierSettings: React.FC = () => {
                       const updated = {
                         ...creds,
                         isSandbox: isSand,
-                        storeId: isSand ? 11 : 500277,
+                        storeId: isSand ? 11 : undefined,
                       };
                       setCreds(updated);
                       savePathaoCredentials(updated);
@@ -674,7 +685,7 @@ export const CourierSettings: React.FC = () => {
                   type="text"
                   value={carrybeeCreds.clientId}
                   onChange={(e) => setCarrybeeCreds({ ...carrybeeCreds, clientId: e.target.value })}
-                  placeholder="e.g. ae2fce67-a7b6-4749-82ff-..."
+                  placeholder="e.g. 0138e545-3482-48a1-a61c-f357e4757df9"
                   className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
                 />
               </div>
@@ -710,7 +721,7 @@ export const CourierSettings: React.FC = () => {
                     type={showCarrybeeContext ? 'text' : 'password'}
                     value={carrybeeCreds.clientContext}
                     onChange={(e) => setCarrybeeCreds({ ...carrybeeCreds, clientContext: e.target.value })}
-                    placeholder="e.g. MJh6nyloHRUQemOjrJSYwEbdaLFTuX"
+                    placeholder="e.g. snPY8jaGonyxSfHYik9EJchM31egWX"
                     className="w-full pl-3 pr-9 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
                   />
                   <button
@@ -808,30 +819,40 @@ export const CourierSettings: React.FC = () => {
 
         {/* Top Header Marquee Announcement Bar */}
         <div className="p-6 bg-white dark:bg-[#121216] border border-stone-200 dark:border-white/10 rounded-sm space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-white/5">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-stone-100 dark:border-white/5">
             <div className="flex items-center gap-2.5">
               <div className="p-2 bg-amber-50 dark:bg-amber-950/40 text-amber-600 rounded">
                 <Megaphone className="w-4 h-4" />
               </div>
               <div>
                 <h3 className="text-sm font-medium text-stone-900 dark:text-white">
-                  Header Top Announcement Bar (Right-to-Left Marquee)
+                  Header Top Announcement Bar (Topbar ON / OFF)
                 </h3>
                 <p className="text-[11px] text-stone-500">
-                  Displays a smooth scrolling banner at the very top of the storefront above the navigation.
+                  Toggle visibility ON or OFF, or edit the scrolling announcement message at the top of the website.
                 </p>
               </div>
             </div>
 
-            <label className="flex items-center gap-2 cursor-pointer">
-              <span className="text-[11px] text-stone-500">Enable Ticker</span>
-              <input
-                type="checkbox"
-                checked={isAnnouncementActive}
-                onChange={(e) => setIsAnnouncementActive(e.target.checked)}
-                className="rounded border-stone-300"
+            <button
+              type="button"
+              onClick={() => {
+                setIsDirty(true);
+                setIsAnnouncementActive((prev) => !prev);
+              }}
+              className={`px-3 py-1.5 rounded text-[11px] font-semibold inline-flex items-center gap-2 border transition-colors cursor-pointer ${
+                isAnnouncementActive
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800 dark:bg-emerald-950/50 dark:border-emerald-700 dark:text-emerald-300'
+                  : 'bg-stone-100 border-stone-300 text-stone-600 dark:bg-white/5 dark:border-white/15 dark:text-stone-400'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isAnnouncementActive ? 'bg-emerald-500' : 'bg-stone-400'
+                }`}
               />
-            </label>
+              <span>{isAnnouncementActive ? 'Topbar: ON (Visible)' : 'Topbar: OFF (Hidden)'}</span>
+            </button>
           </div>
 
           <div>
@@ -841,12 +862,15 @@ export const CourierSettings: React.FC = () => {
             <input
               type="text"
               value={announcementText}
-              onChange={(e) => setAnnouncementText(e.target.value)}
+              onChange={(e) => {
+                setIsDirty(true);
+                setAnnouncementText(e.target.value);
+              }}
               placeholder="EID ARCHIVE 2026 IS LIVE · CASH ON DELIVERY NATIONWIDE · COMPLIMENTARY SHIPPING OVER ৳5,000"
               className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono text-xs"
             />
             <span className="text-[10px] text-stone-400 mt-1 block">
-              Tip: Separate announcements with middle dots ( · ) or bullets for an elegant architectural look.
+              Tip: Toggle Topbar OFF above and click &ldquo;Save Configurations&rdquo; to completely hide the top bar from visitors.
             </span>
           </div>
         </div>
@@ -875,7 +899,10 @@ export const CourierSettings: React.FC = () => {
               <input
                 type="text"
                 value={whatsappNumber}
-                onChange={(e) => setWhatsappNumber(e.target.value)}
+                onChange={(e) => {
+                  setIsDirty(true);
+                  setWhatsappNumber(e.target.value);
+                }}
                 placeholder="8801XXXXXXXXX"
                 className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
               />
@@ -889,9 +916,12 @@ export const CourierSettings: React.FC = () => {
                 Facebook Page URL
               </label>
               <input
-                type="url"
+                type="text"
                 value={facebookUrl}
-                onChange={(e) => setFacebookUrl(e.target.value)}
+                onChange={(e) => {
+                  setIsDirty(true);
+                  setFacebookUrl(e.target.value);
+                }}
                 placeholder="https://facebook.com/sparta.clo"
                 className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
               />
@@ -902,9 +932,12 @@ export const CourierSettings: React.FC = () => {
                 Instagram Profile URL
               </label>
               <input
-                type="url"
+                type="text"
                 value={instagramUrl}
-                onChange={(e) => setInstagramUrl(e.target.value)}
+                onChange={(e) => {
+                  setIsDirty(true);
+                  setInstagramUrl(e.target.value);
+                }}
                 placeholder="https://instagram.com/sparta.clo"
                 className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
               />
@@ -915,9 +948,12 @@ export const CourierSettings: React.FC = () => {
                 TikTok Profile URL
               </label>
               <input
-                type="url"
+                type="text"
                 value={tiktokUrl}
-                onChange={(e) => setTiktokUrl(e.target.value)}
+                onChange={(e) => {
+                  setIsDirty(true);
+                  setTiktokUrl(e.target.value);
+                }}
                 placeholder="https://tiktok.com/@sparta_clo"
                 className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
               />
@@ -943,7 +979,10 @@ export const CourierSettings: React.FC = () => {
               <input
                 type="checkbox"
                 checked={isFreeDeliveryActive}
-                onChange={(e) => setIsFreeDeliveryActive(e.target.checked)}
+                onChange={(e) => {
+                  setIsDirty(true);
+                  setIsFreeDeliveryActive(e.target.checked);
+                }}
                 className="rounded border-stone-300"
               />
             </label>
@@ -957,7 +996,10 @@ export const CourierSettings: React.FC = () => {
               <input
                 type="number"
                 value={insideDhakaFee}
-                onChange={(e) => setInsideDhakaFee(e.target.value)}
+                onChange={(e) => {
+                  setIsDirty(true);
+                  setInsideDhakaFee(e.target.value);
+                }}
                 className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
               />
             </div>
@@ -969,7 +1011,10 @@ export const CourierSettings: React.FC = () => {
               <input
                 type="number"
                 value={outsideDhakaFee}
-                onChange={(e) => setOutsideDhakaFee(e.target.value)}
+                onChange={(e) => {
+                  setIsDirty(true);
+                  setOutsideDhakaFee(e.target.value);
+                }}
                 className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
               />
             </div>
@@ -981,7 +1026,10 @@ export const CourierSettings: React.FC = () => {
               <input
                 type="number"
                 value={freeShippingThreshold}
-                onChange={(e) => setFreeShippingThreshold(e.target.value)}
+                onChange={(e) => {
+                  setIsDirty(true);
+                  setFreeShippingThreshold(e.target.value);
+                }}
                 className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none font-mono"
               />
             </div>

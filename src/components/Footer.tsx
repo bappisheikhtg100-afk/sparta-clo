@@ -83,14 +83,14 @@ export const Footer: React.FC = () => {
               <p>
                 WhatsApp:{' '}
                 <a
-                  href={`https://wa.me/${STORE_INFO.whatsappNumber}?text=${encodeURIComponent(
+                  href={`https://wa.me/${(storeSettings.whatsappNumber || STORE_INFO.whatsappNumber).replace(/\D/g, '')}?text=${encodeURIComponent(
                     'Hello SPARTA Support!'
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono tabular-nums text-[#111111] dark:text-zinc-200 hover:underline"
                 >
-                  {STORE_INFO.phone}
+                  {storeSettings.whatsappNumber ? `+${storeSettings.whatsappNumber.replace(/\D/g, '')}` : STORE_INFO.phone}
                 </a>
               </p>
               <p>
@@ -103,9 +103,13 @@ export const Footer: React.FC = () => {
                 </a>
               </p>
               <div className="pt-3 flex items-center gap-3">
-                {storeSettings.facebookUrl && (
+                {storeSettings.facebookUrl?.trim() && (
                   <a
-                    href={storeSettings.facebookUrl}
+                    href={
+                      /^https?:\/\//i.test(storeSettings.facebookUrl.trim())
+                        ? storeSettings.facebookUrl.trim()
+                        : `https://${storeSettings.facebookUrl.trim()}`
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Follow SPARTA on Facebook"
@@ -114,9 +118,13 @@ export const Footer: React.FC = () => {
                     <FacebookIcon className="w-4 h-4" />
                   </a>
                 )}
-                {storeSettings.instagramUrl && (
+                {storeSettings.instagramUrl?.trim() && (
                   <a
-                    href={storeSettings.instagramUrl}
+                    href={
+                      /^https?:\/\//i.test(storeSettings.instagramUrl.trim())
+                        ? storeSettings.instagramUrl.trim()
+                        : `https://${storeSettings.instagramUrl.trim()}`
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Follow SPARTA on Instagram"
@@ -125,9 +133,13 @@ export const Footer: React.FC = () => {
                     <InstagramIcon className="w-4 h-4" />
                   </a>
                 )}
-                {storeSettings.tiktokUrl && (
+                {storeSettings.tiktokUrl?.trim() && (
                   <a
-                    href={storeSettings.tiktokUrl}
+                    href={
+                      /^https?:\/\//i.test(storeSettings.tiktokUrl.trim())
+                        ? storeSettings.tiktokUrl.trim()
+                        : `https://${storeSettings.tiktokUrl.trim()}`
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Follow SPARTA on TikTok"
@@ -136,17 +148,19 @@ export const Footer: React.FC = () => {
                     <TikTokIcon className="w-4 h-4" />
                   </a>
                 )}
-                <a
-                  href={`https://wa.me/${storeSettings.whatsappNumber || '8801610046310'}?text=${encodeURIComponent(
-                    'Hello SPARTA!'
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Chat with SPARTA on WhatsApp"
-                  className="p-2.5 rounded-full bg-stone-100 dark:bg-white/5 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-[#111111] dark:text-zinc-200 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                >
-                  <WhatsAppIcon className="w-4 h-4" />
-                </a>
+                {storeSettings.whatsappNumber?.trim() && (
+                  <a
+                    href={`https://wa.me/${storeSettings.whatsappNumber.replace(/\D/g, '')}?text=${encodeURIComponent(
+                      'Hello SPARTA!'
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Chat with SPARTA on WhatsApp"
+                    className="p-2.5 rounded-full bg-stone-100 dark:bg-white/5 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-[#111111] dark:text-zinc-200 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                  >
+                    <WhatsAppIcon className="w-4 h-4" />
+                  </a>
+                )}
               </div>
             </div>
           </div>

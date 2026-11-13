@@ -70,23 +70,15 @@ export async function createOrderRecord(
     total: receipt.total,
     status: 'pending',
     paymentStatus: 'pending',
-    courierName: 'Pathao Courier',
+    courierName: 'Unassigned',
     internalNotes: shipping.notes || undefined,
     items: receipt.items,
   };
 
-  // 1. Save in local cache first
-  const existing = getStoredOrders();
-  saveStoredOrders([adminOrder, ...existing.filter((o) => o.orderNumber !== receipt.orderId)]);
-
-  // Notify active windows/tabs
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('sparta_orders_updated'));
-  }
-
-  // 2. Persist to Supabase Database
+  // 1. Persist to Supabase Database first so server-side 30-min rate limit & validation apply
+  let savedToSupabase = false;
   try {
-    // Attempt 1: Atomic RPC function
+    // Attempt 1: Atomic RPC function with anti-spam rate limit & validation
     const { data: rpcData, error: rpcErr } = await supabase.rpc('create_public_checkout_order', {
       p_order_number: receipt.orderId,
       p_customer_name: shipping.fullName,
@@ -107,8 +99,16 @@ export async function createOrderRecord(
       })),
     });
 
-    if (rpcErr || (rpcData && !rpcData.success)) {
-      // Attempt 2: Direct Table Insert
+    if (rpcData && rpcData.success === false) {
+      if (rpcData.code === 'RATE_LIMITED' || rpcData.code === 'INVALID_INPUT') {
+        throw new Error(rpcData.error || 'Order rejected by anti-spam protection.');
+      }
+    }
+
+    if (!rpcErr && rpcData?.success) {
+      savedToSupabase = true;
+    } else if (rpcErr || !rpcData?.success) {
+      // Attempt 2: Direct Table Insert (only when RPC missing or transient RPC failure, never bypass rate limit)
       const { data: orderData, error: orderErr } = await supabase
         .from('orders')
         .insert({
@@ -128,6 +128,7 @@ export async function createOrderRecord(
         .single();
 
       if (!orderErr && orderData?.id) {
+        savedToSupabase = true;
         const itemsToInsert = receipt.items.map((item) => ({
           order_id: orderData.id,
           product_id: item.productId,
@@ -141,18 +142,43 @@ export async function createOrderRecord(
 
         await supabase.from('order_items').insert(itemsToInsert);
 
-        await supabase.from('customers').upsert({
-          phone: shipping.phone,
-          full_name: shipping.fullName,
-          address: fullAddress,
-          delivery_zone: shipping.deliveryZone,
-        });
+        await supabase.from('customers').upsert(
+          {
+            phone: shipping.phone,
+            full_name: shipping.fullName,
+            address: fullAddress,
+            delivery_zone: shipping.deliveryZone,
+          },
+          { onConflict: 'phone' }
+        );
       } else if (orderErr) {
         console.error('Failed to insert order into Supabase:', orderErr);
       }
     }
-  } catch (err) {
+  } catch (err: any) {
+    // Re-throw anti-fraud / cooldown rejections directly to UI
+    if (
+      err?.message?.includes('minute') ||
+      err?.message?.includes('মিনিট') ||
+      err?.message?.includes('invalid') ||
+      err?.message?.includes('rejected')
+    ) {
+      throw err;
+    }
     console.error('Supabase order creation exception:', err);
+  }
+
+  // 2. Save in local cache once accepted
+  const existing = getStoredOrders();
+  saveStoredOrders([adminOrder, ...existing.filter((o) => o.orderNumber !== receipt.orderId)]);
+
+  // Notify active windows/tabs
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('sparta_orders_updated'));
+  }
+
+  if (!savedToSupabase) {
+    console.warn('Order cached locally; verify Supabase SQL permissions if not visible across devices.');
   }
 
   return receipt.orderId;

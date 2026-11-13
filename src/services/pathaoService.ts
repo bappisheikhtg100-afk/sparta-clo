@@ -113,21 +113,54 @@ export const PATHAO_SANDBOX_DEFAULTS: PathaoCredentials = {
 };
 
 export const PATHAO_PRODUCTION_DEFAULTS: PathaoCredentials = {
-  clientId: 'M7e549Xd2v',
-  clientSecret: 'HkyIjgXODf9GYMK9jiBxUi8mK1fD2auU4iyQns46',
-  username: 'bappisheikhtg100@gmail.com',
-  password: '%SH$w$$vup6AgH3',
-  storeId: 500277,
+  clientId: '',
+  clientSecret: '',
+  username: '',
+  password: '',
+  storeId: undefined,
   isSandbox: false,
 };
+
+function fnv1aHex(val?: string | number | null): string {
+  const str = String(val ?? '').trim();
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16);
+}
+
+function isLegacyPersonalPathaoCreds(creds?: Partial<PathaoCredentials> | null): boolean {
+  if (!creds) return false;
+  return (
+    fnv1aHex(creds.clientId) === '2c01260c' ||
+    creds.clientId === 'YOUR_PATHAO_CLIENT_ID' ||
+    fnv1aHex(creds.username) === 'e4925e5a' ||
+    fnv1aHex(creds.storeId) === 'ef0c49c'
+  );
+}
+
+export function clearPathaoCredentials(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY_CREDS);
+    Object.keys(localStorage).forEach((k) => {
+      if (k.startsWith(STORAGE_KEY_TOKEN)) {
+        localStorage.removeItem(k);
+      }
+    });
+  } catch {
+    // ignore
+  }
+}
 
 export function getStoredPathaoCredentials(): PathaoCredentials {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CREDS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Auto-correct if placeholder was stored
-      if (parsed.clientId === 'YOUR_PATHAO_CLIENT_ID' || !parsed.clientId) {
+      if (isLegacyPersonalPathaoCreds(parsed)) {
+        clearPathaoCredentials();
         return { ...PATHAO_PRODUCTION_DEFAULTS };
       }
       return {
@@ -141,11 +174,11 @@ export function getStoredPathaoCredentials(): PathaoCredentials {
 
   return {
     ...PATHAO_PRODUCTION_DEFAULTS,
-    clientId: (import.meta.env.VITE_PATHAO_CLIENT_ID as string) || PATHAO_PRODUCTION_DEFAULTS.clientId,
-    clientSecret: (import.meta.env.VITE_PATHAO_CLIENT_SECRET as string) || PATHAO_PRODUCTION_DEFAULTS.clientSecret,
-    username: (import.meta.env.VITE_PATHAO_USERNAME as string) || PATHAO_PRODUCTION_DEFAULTS.username,
-    password: (import.meta.env.VITE_PATHAO_PASSWORD as string) || PATHAO_PRODUCTION_DEFAULTS.password,
-    storeId: 500277,
+    clientId: (import.meta.env.VITE_PATHAO_CLIENT_ID as string) || '',
+    clientSecret: (import.meta.env.VITE_PATHAO_CLIENT_SECRET as string) || '',
+    username: (import.meta.env.VITE_PATHAO_USERNAME as string) || '',
+    password: (import.meta.env.VITE_PATHAO_PASSWORD as string) || '',
+    storeId: undefined,
     isSandbox: false,
   };
 }
@@ -153,14 +186,17 @@ export function getStoredPathaoCredentials(): PathaoCredentials {
 export function savePathaoCredentials(creds: PathaoCredentials): void {
   try {
     localStorage.setItem(STORAGE_KEY_CREDS, JSON.stringify(creds));
-    // Asynchronously sync to Supabase store_settings so client credentials persist across all devices & sessions!
+    // Asynchronously sync to Supabase store_settings so client credentials persist across all devices & sessions
     void (async () => {
       try {
-        await supabase.from('store_settings').upsert({
-          setting_key: 'pathao_credentials',
-          setting_value: creds,
-          updated_at: new Date().toISOString(),
-        });
+        await supabase.from('store_settings').upsert(
+          {
+            setting_key: 'pathao_credentials',
+            setting_value: creds,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'setting_key' }
+        );
       } catch (err) {
         console.warn('Supabase creds sync notice:', err);
       }
@@ -181,10 +217,18 @@ export async function syncPathaoCredentialsFromSupabase(): Promise<PathaoCredent
       .eq('setting_key', 'pathao_credentials')
       .maybeSingle();
 
-    if (data?.setting_value && data.setting_value.clientId) {
+    if (data?.setting_value) {
       const parsed = data.setting_value as PathaoCredentials;
-      localStorage.setItem(STORAGE_KEY_CREDS, JSON.stringify(parsed));
-      return parsed;
+      if (isLegacyPersonalPathaoCreds(parsed)) {
+        clearPathaoCredentials();
+        // Also overwrite legacy personal credentials in Supabase if logged in
+        void savePathaoCredentials({ ...PATHAO_PRODUCTION_DEFAULTS });
+        return { ...PATHAO_PRODUCTION_DEFAULTS };
+      }
+      if (parsed.clientId) {
+        localStorage.setItem(STORAGE_KEY_CREDS, JSON.stringify(parsed));
+        return parsed;
+      }
     }
   } catch (err) {
     console.warn('Could not sync Pathao credentials from Supabase:', err);
@@ -509,8 +553,11 @@ export async function resolvePathaoStoreId(
     console.warn('Could not query stores for dynamic resolution, using default:', err);
   }
 
-  // Default known live store for Best Test Brand
-  return creds.isSandbox ? 11 : 500277;
+  if (creds.storeId && Number(creds.storeId) > 0) {
+    return Number(creds.storeId);
+  }
+
+  throw new Error('No active Pathao Pickup Store found. Please configure and test your Pathao credentials in Settings.');
 }
 
 /**
