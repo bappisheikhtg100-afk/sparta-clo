@@ -369,6 +369,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         });
       }
     }
+    if (route !== 'admin') {
+      trackMetaPixelEvent('PageView');
+    }
     if (route === 'checkout') {
       trackMetaPixelEvent('InitiateCheckout');
     }

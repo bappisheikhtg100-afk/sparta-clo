@@ -22,8 +22,8 @@ export function initMetaPixel(pixelId: string): void {
 
   const cleanId = pixelId.trim();
 
-  // If already initialized with this ID, don't re-inject
-  if (window.fbq && (window as any).__sparta_active_pixel === cleanId) {
+  // If already initialized with this ID (including via index.html), don't re-init or double-fire PageView
+  if ((window as any).__sparta_active_pixel === cleanId || (window.fbq && (window as any).__sparta_active_pixel === cleanId)) {
     return;
   }
 

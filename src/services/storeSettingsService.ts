@@ -21,8 +21,8 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   freeShippingThreshold: 5000,
   spendSaveThreshold: 3000,
   spendSaveDiscount: 200,
-  metaPixelId: '',
-  isMetaPixelActive: false,
+  metaPixelId: '1890947928931087',
+  isMetaPixelActive: true,
   googleAnalyticsId: '',
   isGoogleAnalyticsActive: false,
   customHeadScripts: '',
@@ -55,7 +55,15 @@ const COUPONS_STORAGE_KEY = 'sparta_store_coupons_v3';
 export function getLocalStoreSettings(): StoreSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (raw) return { ...DEFAULT_STORE_SETTINGS, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        ...DEFAULT_STORE_SETTINGS,
+        ...parsed,
+        metaPixelId: parsed?.metaPixelId?.trim() || DEFAULT_STORE_SETTINGS.metaPixelId,
+        isMetaPixelActive: parsed?.metaPixelId?.trim() ? parsed.isMetaPixelActive : true,
+      };
+    }
   } catch {
     // fallback
   }
@@ -105,7 +113,14 @@ export async function fetchStoreSettings(): Promise<StoreSettings> {
       .maybeSingle();
 
     if (!error && data?.setting_value) {
-      const merged: StoreSettings = { ...DEFAULT_STORE_SETTINGS, ...data.setting_value };
+      const merged: StoreSettings = {
+        ...DEFAULT_STORE_SETTINGS,
+        ...data.setting_value,
+        metaPixelId: data.setting_value?.metaPixelId?.trim() || DEFAULT_STORE_SETTINGS.metaPixelId,
+        isMetaPixelActive: data.setting_value?.metaPixelId?.trim()
+          ? data.setting_value.isMetaPixelActive
+          : true,
+      };
       saveLocalStoreSettings(merged);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('sparta_settings_updated', { detail: merged }));

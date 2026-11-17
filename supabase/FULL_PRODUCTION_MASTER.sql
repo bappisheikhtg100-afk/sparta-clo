@@ -542,8 +542,8 @@ VALUES
       "freeShippingThreshold": 5000,
       "spendSaveThreshold": 3000,
       "spendSaveDiscount": 200,
-      "metaPixelId": "",
-      "isMetaPixelActive": false,
+      "metaPixelId": "1890947928931087",
+      "isMetaPixelActive": true,
       "googleAnalyticsId": "",
       "isGoogleAnalyticsActive": false,
       "customHeadScripts": ""
