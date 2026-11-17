@@ -144,9 +144,13 @@ function buildSeoHtml({
     out = out.replace('</head>', ldScript);
   }
 
+  // Render a sleek, match-styled brand loading screen inside #root so visitors never see unstyled HTML
+  // or stale product photos before React mounts, while preserving full crawlable HTML inside <noscript>.
+  const preReactSplash =
+    '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#FAF9F6;color:#111111;font-family:\'Cormorant Garamond\',Georgia,serif;font-size:1.35rem;letter-spacing:0.38em;text-transform:uppercase;font-weight:500;">SPARTA</div>';
   out = out.replace(
     '<div id="root"></div>',
-    `<div id="root">${rootFallbackHtml}</div>`
+    `<div id="root">${preReactSplash}</div>\n    <noscript>${rootFallbackHtml}</noscript>`
   );
 
   return out;
@@ -155,11 +159,9 @@ function buildSeoHtml({
 const catalogFallbackCards = products
   .map((p) => {
     const { price, isStarting } = getPriceInfo(p);
-    const img = toAbsImage(p.images?.[0]);
     return `
       <article>
         <a href="/product/${escapeHtml(p.id)}/">
-          <img src="${escapeHtml(img)}" alt="${escapeHtml(p.name)}" width="300" height="400" />
           <h2>${escapeHtml(p.name)}</h2>
         </a>
         <p>${escapeHtml(p.category)} · ${isStarting ? 'From ' : ''}৳${price}</p>
@@ -168,7 +170,7 @@ const catalogFallbackCards = products
   })
   .join('\n');
 
-// 1. Enrich root dist/index.html with semantic crawlable storefront content inside #root
+// 1. Enrich root dist/index.html with SEO metadata & clean pre-React splash
 const homeFallbackHtml = `
   <main style="max-width:1200px;margin:0 auto;padding:24px;font-family:sans-serif">
     <header>
@@ -274,7 +276,6 @@ for (const product of products) {
       </nav>
       <h1>${escapeHtml(product.name)}</h1>
       <p><strong>Category:</strong> ${escapeHtml(product.category)} · <strong>Price:</strong> ৳${price}</p>
-      <img src="${escapeHtml(primaryImg)}" alt="${escapeHtml(product.name)}" width="500" height="650" />
       <p>${escapeHtml(product.description)}</p>
       ${detailsList ? `<ul>${detailsList}</ul>` : ''}
       <p>Cash on Delivery across Dhaka &amp; all districts of Bangladesh.</p>

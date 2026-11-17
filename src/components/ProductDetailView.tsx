@@ -16,6 +16,7 @@ import { useStore } from '../context/StoreContext';
 import { SmartImage } from './SmartImage';
 import { ProductCard } from './ProductCard';
 import { getRealisticVisitorCount } from '../services/visitorEngine';
+import { trackMetaPixelEvent } from '../services/pixelService';
 
 export const ProductDetailView: React.FC = () => {
   const { selectedProduct, addToCart, navigate, products, storeSettings } = useStore();
@@ -31,6 +32,31 @@ export const ProductDetailView: React.FC = () => {
   );
 
   const sizeSectionRef = useRef<HTMLDivElement | null>(null);
+  const trackedProductIdRef = useRef<string | null>(null);
+
+  // Track Meta Pixel ViewContent reliably whenever product detail page displays
+  useEffect(() => {
+    if (!selectedProduct) return;
+    if (trackedProductIdRef.current === selectedProduct.id) return;
+    trackedProductIdRef.current = selectedProduct.id;
+
+    const { price } = getDisplayPrice(selectedProduct);
+    trackMetaPixelEvent('ViewContent', {
+      content_name: selectedProduct.name,
+      content_category: selectedProduct.category,
+      content_ids: [selectedProduct.id],
+      content_type: 'product',
+      contents: [
+        {
+          id: selectedProduct.id,
+          quantity: 1,
+          item_price: price,
+        },
+      ],
+      value: price,
+      currency: 'BDT',
+    });
+  }, [selectedProduct]);
 
   // Dynamic SEO Metadata & Schema.org Product Structured Data for Google Search Console
   useEffect(() => {

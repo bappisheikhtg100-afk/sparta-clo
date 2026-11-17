@@ -5,7 +5,7 @@ import { MEDIA_ASSETS, PRODUCTS } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
 
 export const HeroSection: React.FC = () => {
-  const { jumpToCategory, navigate, theme, products } = useStore();
+  const { jumpToCategory, navigate, theme, products, isProductsLoading } = useStore();
   const sectionRef = useRef<HTMLElement | null>(null);
   const mobileVideoRef = useRef<HTMLVideoElement | null>(null);
   const desktopVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -78,7 +78,7 @@ export const HeroSection: React.FC = () => {
     }
   };
 
-  const signaturePiece = products && products.length > 0 ? products[0] : PRODUCTS[0];
+  const signaturePiece = products.length > 0 ? products[0] : (isProductsLoading ? undefined : PRODUCTS[0]);
 
   return (
     <section
@@ -148,13 +148,15 @@ export const HeroSection: React.FC = () => {
               <ArrowRight className="w-4 h-4" />
             </button>
 
-            <button
-              type="button"
-              onClick={() => navigate('product', signaturePiece)}
-              className="min-h-[48px] px-5 py-3 bg-transparent border border-white/35 text-white text-xs sm:text-sm font-medium tracking-wide whitespace-nowrap shrink-0 active:scale-[0.98] transition-transform"
-            >
-              Spartan Cable Knit
-            </button>
+            {signaturePiece && (
+              <button
+                type="button"
+                onClick={() => navigate('product', signaturePiece)}
+                className="min-h-[48px] px-5 py-3 bg-transparent border border-white/35 text-white text-xs sm:text-sm font-medium tracking-wide whitespace-nowrap shrink-0 active:scale-[0.98] transition-transform cursor-pointer"
+              >
+                {signaturePiece.name}
+              </button>
+            )}
           </div>
         </motion.div>
       </div>
@@ -201,13 +203,15 @@ export const HeroSection: React.FC = () => {
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              <button
-                type="button"
-                onClick={() => navigate('product', signaturePiece)}
-                className="min-h-[48px] py-2 text-sm font-medium text-stone-800 dark:text-zinc-200 border-b border-stone-400 dark:border-zinc-600 hover:border-[#111111] dark:hover:border-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                Shop Spartan Cable Knit
-              </button>
+              {signaturePiece && (
+                <button
+                  type="button"
+                  onClick={() => navigate('product', signaturePiece)}
+                  className="min-h-[48px] py-2 text-sm font-medium text-stone-800 dark:text-zinc-200 border-b border-stone-400 dark:border-zinc-600 hover:border-[#111111] dark:hover:border-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  Shop {signaturePiece.name}
+                </button>
+              )}
             </div>
           </motion.div>
 

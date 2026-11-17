@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Minus, Plus, Trash2, Tag, X, Loader2 } from 'lucide-react';
 import { BANGLADESH_DIVISIONS, formatBDT, STORE_INFO } from '../data/storeData';
 import { useStore } from '../context/StoreContext';
 import { DeliveryZone, ShippingDetails } from '../types/store';
 import { normalizeBangladeshPhone } from '../services/pathaoService';
+import { trackMetaPixelEvent } from '../services/pixelService';
 import { SmartImage } from './SmartImage';
 
 export const CheckoutView: React.FC = () => {
@@ -37,6 +38,25 @@ export const CheckoutView: React.FC = () => {
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const trackedCheckoutRef = useRef(false);
+
+  // Track Meta Pixel InitiateCheckout reliably whenever checkout renders with items
+  useEffect(() => {
+    if (cart.length === 0 || trackedCheckoutRef.current) return;
+    trackedCheckoutRef.current = true;
+    trackMetaPixelEvent('InitiateCheckout', {
+      content_ids: cart.map((item) => item.productId),
+      content_type: 'product',
+      contents: cart.map((item) => ({
+        id: item.productId,
+        quantity: item.quantity,
+        item_price: item.price,
+      })),
+      num_items: cart.reduce((sum, item) => sum + item.quantity, 0),
+      value: cartSubtotal,
+      currency: 'BDT',
+    });
+  }, [cart, cartSubtotal]);
 
   if (cart.length === 0) {
     return (

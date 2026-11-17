@@ -9,7 +9,14 @@ import { supabase } from '../lib/supabase';
 import { Product, Category, StockStatus } from '../types/store';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/storeData';
 
-const LOCAL_PRODUCTS_KEY = 'sparta_local_products_v3';
+const LOCAL_PRODUCTS_KEY = 'sparta_local_products_v4';
+try {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('sparta_local_products_v3');
+  }
+} catch {
+  // ignore
+}
 
 function mapDbRowToProduct(row: any): Product {
   return {
@@ -65,6 +72,19 @@ function mapProductToDbRow(product: Product, isPublished = true) {
   };
 }
 
+export function hasLocalStoredProducts(): boolean {
+  try {
+    const raw = localStorage.getItem(LOCAL_PRODUCTS_KEY);
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed);
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 export function getLocalStoredProducts(): Product[] {
   try {
     const raw = localStorage.getItem(LOCAL_PRODUCTS_KEY);
@@ -75,7 +95,7 @@ export function getLocalStoredProducts(): Product[] {
   } catch {
     // ignore
   }
-  // First time initialization: seed default products into localStorage
+  // First time initialization: seed default products into localStorage only when DB fallback is needed
   saveLocalStoredProducts(DEFAULT_PRODUCTS);
   return DEFAULT_PRODUCTS;
 }

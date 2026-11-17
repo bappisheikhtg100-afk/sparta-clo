@@ -8,7 +8,7 @@ import { ProductCard } from './ProductCard';
 type SortOption = 'featured' | 'price-asc' | 'price-desc';
 
 export const CollectionSection: React.FC = () => {
-  const { activeCategory, setActiveCategory, products } = useStore();
+  const { activeCategory, setActiveCategory, products, isProductsLoading } = useStore();
   const [sortBy, setSortBy] = useState<SortOption>('featured');
   const [inStockOnly, setInStockOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -196,7 +196,17 @@ export const CollectionSection: React.FC = () => {
       </div>
 
       {/* Product Gallery Grid */}
-      {filteredProducts.length === 0 ? (
+      {isProductsLoading && products.length === 0 ? (
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-3.5 gap-y-10 sm:gap-x-6 sm:gap-y-14 lg:gap-x-8 lg:gap-y-16">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex flex-col gap-3 animate-pulse">
+              <div className="w-full aspect-[3/4] bg-stone-200/70 dark:bg-zinc-900 border border-stone-200/50 dark:border-zinc-800" />
+              <div className="h-3 w-24 bg-stone-200/70 dark:bg-zinc-900" />
+              <div className="h-4 w-40 bg-stone-200/70 dark:bg-zinc-900" />
+            </div>
+          ))}
+        </div>
+      ) : filteredProducts.length === 0 ? (
         <div className="py-24 text-center border border-stone-200 dark:border-zinc-800">
           <p className="font-display text-2xl text-[#111111] dark:text-[#F5F4F0] mb-2">
             No pieces match your current selection

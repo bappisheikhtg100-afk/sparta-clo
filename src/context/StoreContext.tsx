@@ -12,7 +12,7 @@ import {
   ToastMessage,
 } from '../types/store';
 import { formatBDT, STORE_INFO, PRODUCTS as STATIC_PRODUCTS } from '../data/storeData';
-import { fetchPublishedProducts, getLocalStoredProducts } from '../services/productService';
+import { fetchPublishedProducts, getLocalStoredProducts, hasLocalStoredProducts } from '../services/productService';
 import { createOrderRecord } from '../services/orderService';
 import {
   DEFAULT_STORE_SETTINGS,
@@ -38,6 +38,7 @@ interface StoreContextValue {
   navigate: (route: RouteView, product?: Product | null) => void;
   jumpToCategory: (cat: Category) => void;
   products: Product[];
+  isProductsLoading: boolean;
   refreshProducts: () => Promise<void>;
   cart: CartItem[];
   cartCount: number;
@@ -116,8 +117,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const sortByOrder = (list: Product[]) =>
     [...list].sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
 
+  const [isProductsLoading, setIsProductsLoading] = useState<boolean>(() => !hasLocalStoredProducts());
   const [products, setProducts] = useState<Product[]>(() =>
-    sortByOrder(getLocalStoredProducts())
+    hasLocalStoredProducts() ? sortByOrder(getLocalStoredProducts()) : []
   );
   const [currentRoute, setCurrentRoute] = useState<RouteView>('home');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -145,6 +147,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setProducts(sortByOrder(live));
     } catch {
       setProducts(sortByOrder(getLocalStoredProducts()));
+    } finally {
+      setIsProductsLoading(false);
     }
   }, []);
 
@@ -359,21 +363,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const navigate = useCallback((route: RouteView, product: Product | null = null) => {
     if (product !== undefined) {
       setSelectedProduct(product);
-      if (product) {
-        trackMetaPixelEvent('ViewContent', {
-          content_name: product.name,
-          content_ids: [product.id],
-          content_type: 'product',
-          value: product.price,
-          currency: 'BDT',
-        });
-      }
     }
     if (route !== 'admin') {
       trackMetaPixelEvent('PageView');
-    }
-    if (route === 'checkout') {
-      trackMetaPixelEvent('InitiateCheckout');
     }
 
     // Push clean canonical URLs to browser history so every product & collection has a real indexable URL
@@ -489,8 +481,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // Meta Pixel AddToCart event
       trackMetaPixelEvent('AddToCart', {
         content_name: product.name,
+        content_category: product.category,
         content_ids: [product.id],
         content_type: 'product',
+        contents: [
+          {
+            id: product.id,
+            quantity,
+            item_price: unitPrice,
+          },
+        ],
         value: unitPrice * quantity,
         currency: 'BDT',
       });
@@ -761,9 +761,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         content_name: 'SPARTA Order ' + orderId,
         content_ids: receipt.items.map((it) => it.productId),
         content_type: 'product',
+        contents: receipt.items.map((it) => ({
+          id: it.productId,
+          quantity: it.quantity,
+          item_price: it.price,
+        })),
         value: receipt.total,
         currency: 'BDT',
         num_items: receipt.items.reduce((acc, it) => acc + it.quantity, 0),
+        order_id: orderId,
       });
 
       return receipt;
@@ -782,6 +788,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       navigate,
       jumpToCategory,
       products,
+      isProductsLoading,
       refreshProducts,
       cart,
       cartCount,
@@ -818,6 +825,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       navigate,
       jumpToCategory,
       products,
+      isProductsLoading,
       refreshProducts,
       cart,
       cartCount,

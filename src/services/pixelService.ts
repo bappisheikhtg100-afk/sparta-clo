@@ -53,6 +53,8 @@ export function initMetaPixel(pixelId: string): void {
   }
 }
 
+const DEFAULT_META_PIXEL_ID = '1890947928931087';
+
 /**
  * Track Custom or Standard Event with Meta Pixel
  */
@@ -60,10 +62,26 @@ export function trackMetaPixelEvent(
   eventName: 'PageView' | 'ViewContent' | 'AddToCart' | 'InitiateCheckout' | 'Purchase',
   params?: Record<string, any>
 ): void {
-  if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
+  if (typeof window === 'undefined') return;
+
+  if (typeof window.fbq !== 'function') {
+    initMetaPixel(DEFAULT_META_PIXEL_ID);
+  }
+
+  if (typeof window.fbq === 'function') {
     try {
-      if (params) {
-        window.fbq('track', eventName, params);
+      if (params && Object.keys(params).length > 0) {
+        const sanitized: Record<string, any> = {};
+        for (const [k, v] of Object.entries(params)) {
+          if (v !== undefined && v !== null) {
+            sanitized[k] = v;
+          }
+        }
+        if (sanitized.value !== undefined) {
+          sanitized.value = Number(sanitized.value) || 0;
+          if (!sanitized.currency) sanitized.currency = 'BDT';
+        }
+        window.fbq('track', eventName, sanitized);
       } else {
         window.fbq('track', eventName);
       }
