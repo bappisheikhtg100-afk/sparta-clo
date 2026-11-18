@@ -90,9 +90,14 @@ CREATE TABLE IF NOT EXISTS public.orders (
   courier_name TEXT DEFAULT 'Pathao Courier',
   consignment_id TEXT,
   courier_status TEXT,
+  telegram_notification_claimed BOOLEAN NOT NULL DEFAULT false,
+  telegram_notified_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS telegram_notification_claimed BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS telegram_notified_at TIMESTAMPTZ;
 
 -- 6. ORDER ITEMS TABLE
 CREATE TABLE IF NOT EXISTS public.order_items (
@@ -137,6 +142,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_customer_phone ON public.orders(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_orders_order_number ON public.orders(order_number);
 CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON public.order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_orders_telegram_pending ON public.orders(id) WHERE telegram_notified_at IS NULL;
 
 -- 10. GLOBAL PERMISSIONS GRANTS (CRITICAL FIX FOR 42501 PERMISSION DENIED)
 GRANT USAGE ON SCHEMA public, extensions TO anon, authenticated, service_role;
