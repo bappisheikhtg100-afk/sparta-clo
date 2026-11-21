@@ -223,6 +223,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
+    // Check if /demo, /demo/, ?page=demo, or #demo
+    if (
+      pathname.replace(/\/+$/, '').endsWith('/demo') ||
+      searchParams.get('page') === 'demo' ||
+      hash === '#demo'
+    ) {
+      setCurrentRoute('demo');
+      return;
+    }
+
     // Check if ?page=checkout
     if (searchParams.get('page') === 'checkout') {
       setCurrentRoute('checkout');
@@ -288,7 +298,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     if (typeof document === 'undefined') return;
     let canonicalPath = '/';
-    if (currentRoute === 'product' && selectedProduct) {
+    if (currentRoute === 'demo') {
+      canonicalPath = '/demo/';
+    } else if (currentRoute === 'product' && selectedProduct) {
       canonicalPath = `/product/${selectedProduct.id}/`;
     } else if (
       typeof window !== 'undefined' &&
@@ -387,6 +399,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         );
       } else if (route === 'admin') {
         window.history.pushState({ route: 'admin' }, '', `${basePath}/#admin`);
+      } else if (route === 'demo') {
+        window.history.pushState({ route: 'demo' }, '', `${basePath}/demo/`);
       } else {
         window.history.pushState({ route: 'home' }, '', `${basePath}/`);
       }

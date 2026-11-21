@@ -14,7 +14,8 @@ export type RouteView =
   | 'checkout'
   | 'order-confirmed'
   | 'admin'
-  | 'admin-login';
+  | 'admin-login'
+  | 'demo';
 
 export type ThemeMode = 'light' | 'dark';
 

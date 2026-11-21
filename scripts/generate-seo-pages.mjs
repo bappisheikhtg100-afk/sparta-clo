@@ -224,6 +224,26 @@ const collectionHtml = buildSeoHtml({
 });
 fs.writeFileSync(path.join(collectionDir, 'index.html'), collectionHtml, 'utf-8');
 
+// 2b. Generate /demo/index.html (HTTP 200 entry for interactive 3D showcase on GitHub Pages)
+const demoDir = path.join(distDir, 'demo');
+fs.mkdirSync(demoDir, { recursive: true });
+const demoHtml = buildSeoHtml({
+  title: 'SPARTA — Interactive 3D Atelier Showcase | Experience',
+  description:
+    'Explore SPARTA minimalist luxury menswear, knitwear, tailored silhouettes, and artisanal fragrances in an interactive 3D editorial showcase.',
+  canonicalUrl: `${siteOrigin}/demo/`,
+  ogImage: `${siteOrigin}/assets/products/spartan-white.png`,
+  jsonLd: null,
+  rootFallbackHtml: `
+    <main style="max-width:1200px;margin:0 auto;padding:24px;font-family:sans-serif">
+      <h1>SPARTA — Interactive 3D Atelier Showcase</h1>
+      <p>Tailored minimalist luxury menswear and artisanal fragrance by SPARTA.</p>
+      <p><a href="/">Visit Official Store</a></p>
+    </main>
+  `,
+});
+fs.writeFileSync(path.join(demoDir, 'index.html'), demoHtml, 'utf-8');
+
 // 3. Generate /product/<id>/index.html for every product (HTTP 200 + Schema.org/Product JSON-LD)
 for (const product of products) {
   const prodDir = path.join(distDir, 'product', product.id);

@@ -22,6 +22,7 @@ import { WhatsAppIcon } from './components/SocialIcons';
 import { AdminLayout } from './admin/AdminLayout';
 import { AdminLogin } from './admin/AdminLogin';
 import { AdminUser, getCurrentAdmin, logoutAdmin } from './services/authService';
+import { DemoPage } from './demo/DemoPage';
 
 const StoreShell: React.FC = () => {
   const { currentRoute, navigate, storeSettings } = useStore();
@@ -40,6 +41,17 @@ const StoreShell: React.FC = () => {
     setAdminUser(null);
     navigate('home');
   };
+
+  // Dedicated 3D Animated Showcase Route (/demo) — strictly isolated from official store layout
+  if (currentRoute === 'demo') {
+    return (
+      <>
+        <DemoPage />
+        <CartDrawer />
+        <ToastContainer />
+      </>
+    );
+  }
 
   // If in admin route
   if (currentRoute === 'admin') {
