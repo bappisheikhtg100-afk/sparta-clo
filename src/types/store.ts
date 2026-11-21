@@ -23,6 +23,7 @@ export interface ColorSwatch {
   hex: string;
   imageIndex?: number;
   imageUrl?: string; // Direct image URL for this specific color variant
+  inStock?: boolean; // undefined or true = In Stock, false = Stock Out
 }
 
 export interface Product {
@@ -41,6 +42,7 @@ export interface Product {
   colorImages?: Record<string, string>; // Mapping from colorway name to image URL
   category: Exclude<Category, 'All'>;
   sizes: string[];
+  outOfStockSizes?: string[]; // Specific sizes/volumes marked as Stock Out
   stock: StockStatus;
   stockCount?: number;
   imageFit?: 'cover-top' | 'cover-center' | 'contain';

@@ -62,13 +62,14 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   const [formDescription, setFormDescription] = useState('');
   const [formDetails, setFormDetails] = useState('');
   const [formSizes, setFormSizes] = useState('S, M, L, XL');
+  const [formOutOfStockSizes, setFormOutOfStockSizes] = useState<string[]>([]);
   const [formStock, setFormStock] = useState<StockStatus>('in-stock');
   const [formStockCount, setFormStockCount] = useState('15');
   const [formFeaturedOnHome, setFormFeaturedOnHome] = useState(true);
   const [formImages, setFormImages] = useState<string[]>([]);
   const [formHoverIndex, setFormHoverIndex] = useState(1);
   const [formColors, setFormColors] = useState<ColorSwatch[]>([
-    { name: 'Onyx Black', hex: '#111111', imageIndex: 0 },
+    { name: 'Onyx Black', hex: '#111111', imageIndex: 0, inStock: true },
   ]);
   const [formSortOrder, setFormSortOrder] = useState('1');
   const [isUploading, setIsUploading] = useState(false);
@@ -84,6 +85,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setFormDescription('Crafted from premium heavyweight combed cotton with reinforced seams.');
     setFormDetails('Heavyweight 280 GSM cotton\nPre-shrunk architectural silhouette\nSilkscreen typography\nHandcrafted in Dhaka');
     setFormSizes('S, M, L, XL');
+    setFormOutOfStockSizes([]);
     setFormStock('in-stock');
     setFormStockCount('20');
     setFormSortOrder((products.length + 1).toString());
@@ -91,7 +93,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setFormImages([]);
     setFormHoverIndex(1);
     setFormColors([
-      { name: 'Onyx Black', hex: '#111111', imageIndex: 0 },
+      { name: 'Onyx Black', hex: '#111111', imageIndex: 0, inStock: true },
     ]);
     setUploadError(null);
     setIsModalOpen(true);
@@ -106,6 +108,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setFormDescription(p.description || '');
     setFormDetails((p.details || []).join('\n'));
     setFormSizes((p.sizes || []).join(', '));
+    setFormOutOfStockSizes(p.outOfStockSizes || []);
     setFormStock(p.stock);
     setFormStockCount(p.stockCount !== undefined ? p.stockCount.toString() : '10');
     setFormSortOrder(p.sortOrder !== undefined ? p.sortOrder.toString() : '1');
@@ -116,15 +119,22 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
       p.colors && p.colors.length > 0
         ? p.colors.map((c) => ({
             ...c,
+            inStock: c.inStock !== false,
             imageUrl:
               c.imageUrl ||
               (p.colorImages && p.colorImages[c.name]) ||
               (c.imageIndex !== undefined ? p.images[c.imageIndex] : undefined),
           }))
-        : [{ name: 'Onyx Black', hex: '#111111', imageIndex: 0 }]
+        : [{ name: 'Onyx Black', hex: '#111111', imageIndex: 0, inStock: true }]
     );
     setUploadError(null);
     setIsModalOpen(true);
+  };
+
+  const toggleFormSizeStock = (size: string) => {
+    setFormOutOfStockSizes((prev) =>
+      prev.includes(size) ? prev.filter((s) => s !== size) : [...prev, size]
+    );
   };
 
   const handleAddColor = () => {
@@ -137,6 +147,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
         hex: preset.hex,
         imageIndex: nextIdx,
         imageUrl: formImages[nextIdx] || '',
+        inStock: true,
       },
     ]);
   };
@@ -239,20 +250,34 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
         }
       });
 
+      const activeOutOfStockSizes = formOutOfStockSizes.filter((s) =>
+        parsedSizes.includes(s)
+      );
+
+      const normalizedColors = formColors.map((c) => ({
+        ...c,
+        inStock: c.inStock !== false,
+      }));
+
       const productPayload: Product = {
         id: productId,
         name: formName.trim(),
         category: formCategory,
         price: formPrice ? Number(formPrice) : undefined,
         originalPrice: formOriginalPrice ? Number(formOriginalPrice) : undefined,
+        priceMap: editingProduct?.priceMap,
+        editionNote: editingProduct?.editionNote,
         description: formDescription.trim(),
         details: formDetails
           .split('\n')
           .map((d) => d.trim())
           .filter(Boolean),
         sizes: parsedSizes,
-        colors: formColors.length > 0 ? formColors : undefined,
+        outOfStockSizes:
+          activeOutOfStockSizes.length > 0 ? activeOutOfStockSizes : undefined,
+        colors: normalizedColors.length > 0 ? normalizedColors : undefined,
         colorImages: Object.keys(colorImagesMap).length > 0 ? colorImagesMap : undefined,
+        sizeImages: editingProduct?.sizeImages,
         stock: formStock,
         stockCount: formStockCount ? Number(formStockCount) : 10,
         sortOrder: formSortOrder ? Number(formSortOrder) : 1,
@@ -262,8 +287,8 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
             ? formImages
             : ['https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&q=80&w=1000'],
         hoverImageIndex: formHoverIndex,
-        hoverFit: 'cover-top',
-        imageFit: 'cover-top',
+        hoverFit: editingProduct?.hoverFit || 'cover-top',
+        imageFit: editingProduct?.imageFit || 'cover-top',
       };
 
       await upsertProduct(productPayload, true);
@@ -472,6 +497,21 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                         <option value="coming-soon">Coming Soon ★</option>
                         <option value="out-of-stock">Out of Stock</option>
                       </select>
+                      {((product.outOfStockSizes && product.outOfStockSizes.length > 0) ||
+                        (product.colors && product.colors.some((c) => c.inStock === false))) && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {product.colors && product.colors.some((c) => c.inStock === false) && (
+                            <span className="px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/50 text-[9px] font-medium">
+                              {product.colors.filter((c) => c.inStock === false).length} color out
+                            </span>
+                          )}
+                          {product.outOfStockSizes && product.outOfStockSizes.length > 0 && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50 text-[9px] font-medium">
+                              {product.outOfStockSizes.join(', ')} out
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-4 font-mono text-stone-700 dark:text-stone-300">
                       {product.stockCount ?? '15'}
@@ -697,6 +737,46 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                   placeholder="S, M, L, XL, XXL (or 15 ml, 50 ml, 100 ml)"
                   className="w-full px-3 py-2 bg-stone-50 dark:bg-black/30 border border-stone-200 dark:border-white/10 text-stone-900 dark:text-white rounded-none outline-none"
                 />
+
+                {parsedFormSizes.length > 0 && (
+                  <div className="mt-2.5 p-3 bg-stone-50/70 dark:bg-white/[0.02] border border-stone-200 dark:border-white/10 rounded space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-700 dark:text-stone-300">
+                        Per-Size Stock Control
+                      </span>
+                      <span className="text-[10px] text-stone-400">
+                        Click a size to toggle In Stock / Stock Out
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {parsedFormSizes.map((size) => {
+                        const isOut = formOutOfStockSizes.includes(size);
+                        return (
+                          <button
+                            key={size}
+                            type="button"
+                            onClick={() => toggleFormSizeStock(size)}
+                            className={`px-2.5 py-1.5 rounded border text-[11px] font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+                              isOut
+                                ? 'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/50 dark:border-rose-800 dark:text-rose-300'
+                                : 'bg-emerald-50 border-emerald-300 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                            }`}
+                          >
+                            {isOut ? (
+                              <X className="w-3 h-3 shrink-0" />
+                            ) : (
+                              <Check className="w-3 h-3 shrink-0" />
+                            )}
+                            <span className={isOut ? 'line-through' : ''}>{size}</span>
+                            <span className="text-[9px] uppercase tracking-wider opacity-80">
+                              {isOut ? 'Stock Out' : 'In Stock'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -847,10 +927,16 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                             : undefined) ||
                           formImages[0];
 
+                        const isColorInStock = color.inStock !== false;
+
                         return (
                           <div
                             key={idx}
-                            className="p-3 bg-stone-50/70 dark:bg-white/[0.02] border border-stone-200 dark:border-white/10 rounded space-y-2.5"
+                            className={`p-3 border rounded space-y-2.5 transition-colors ${
+                              isColorInStock
+                                ? 'bg-stone-50/70 dark:bg-white/[0.02] border-stone-200 dark:border-white/10'
+                                : 'bg-rose-50/40 dark:bg-rose-950/15 border-rose-300/80 dark:border-rose-800/60'
+                            }`}
                           >
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                               {/* Color Name & Swatch Hex */}
@@ -941,6 +1027,31 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                                     />
                                   </div>
                                 )}
+
+                                {/* Per-Color Stock Status Toggle */}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateColor(idx, { inStock: !isColorInStock })
+                                  }
+                                  title={
+                                    isColorInStock
+                                      ? 'Click to mark this colorway Stock Out'
+                                      : 'Click to mark this colorway In Stock'
+                                  }
+                                  className={`px-2 py-1 rounded border text-[10px] font-semibold uppercase tracking-wide inline-flex items-center gap-1 cursor-pointer transition-colors shrink-0 ${
+                                    isColorInStock
+                                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-300'
+                                      : 'bg-rose-100 border-rose-300 text-rose-700 hover:bg-rose-200 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-300'
+                                  }`}
+                                >
+                                  {isColorInStock ? (
+                                    <Check className="w-3 h-3" />
+                                  ) : (
+                                    <X className="w-3 h-3" />
+                                  )}
+                                  <span>{isColorInStock ? 'In Stock' : 'Stock Out'}</span>
+                                </button>
 
                                 {formColors.length > 1 && (
                                   <button

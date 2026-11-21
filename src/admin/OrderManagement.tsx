@@ -43,6 +43,21 @@ interface OrderManagementProps {
   onOpenBulkLabels: (selectedOrders: AdminOrder[]) => void;
 }
 
+function formatCarrybeeProductDescription(items: AdminOrder['items']): string {
+  if (!items || items.length === 0) return 'SPARTA Luxury Apparel';
+  const parts = items.map((it) => {
+    const qty = Math.max(1, Number(it.quantity) || 1);
+    const details = [
+      it.color ? `Color: ${it.color}` : '',
+      it.size ? `Size: ${it.size}` : '',
+    ].filter(Boolean);
+    return details.length > 0
+      ? `${qty}x ${it.name} (${details.join(', ')})`
+      : `${qty}x ${it.name}`;
+  });
+  return parts.join(' | ');
+}
+
 export const OrderManagement: React.FC<OrderManagementProps> = ({
   orders,
   onRefresh,
@@ -247,7 +262,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
         item_quantity: Math.max(1, order.items.reduce((acc, it) => acc + it.quantity, 0)),
         item_weight: 500, // grams
         amount_to_collect: order.total,
-        product_description: order.items.map((it) => it.name).join(', ') || 'SPARTA Luxury Apparel',
+        product_description: formatCarrybeeProductDescription(order.items),
         special_instruction: order.internalNotes || 'Fragile luxury apparel - Handle with care',
       });
 
@@ -928,7 +943,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
                   </div>
 
                   <p className="text-[11px] text-stone-600 dark:text-stone-400">
-                    Transfers parcel weight, COD total ({formatBDT(selectedOrder.total)}), and recipient address directly to Carrybee Courier.
+                    Transfers parcel weight, COD total ({formatBDT(selectedOrder.total)}), product/color/size details, and recipient address directly to Carrybee Courier.
                   </p>
 
                   <div className="flex flex-wrap items-center gap-3">

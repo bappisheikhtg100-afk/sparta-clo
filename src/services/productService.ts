@@ -18,7 +18,40 @@ try {
   // ignore
 }
 
+function parseOutOfStockSizes(rawSizeImages: any, explicitList?: any): string[] | undefined {
+  if (Array.isArray(explicitList) && explicitList.length > 0) {
+    return explicitList.map(String);
+  }
+  const encoded = rawSizeImages?.__outOfStockSizes;
+  if (Array.isArray(encoded) && encoded.length > 0) {
+    return encoded.map(String);
+  }
+  if (typeof encoded === 'string' && encoded.trim()) {
+    try {
+      const parsed = JSON.parse(encoded);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map(String);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return undefined;
+}
+
+function cleanSizeImages(rawSizeImages: any): Record<string, string> | undefined {
+  if (!rawSizeImages || typeof rawSizeImages !== 'object') return undefined;
+  const cleaned: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rawSizeImages)) {
+    if (k !== '__outOfStockSizes' && typeof v === 'string' && v.trim()) {
+      cleaned[k] = v;
+    }
+  }
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+}
+
 function mapDbRowToProduct(row: any): Product {
+  const rawSizeImages = row.size_images || row.sizeImages;
   return {
     id: row.id,
     name: row.name,
@@ -34,17 +67,25 @@ function mapDbRowToProduct(row: any): Product {
     colors: row.colors || undefined,
     category: row.category as Exclude<Category, 'All'>,
     sizes: Array.isArray(row.sizes) ? row.sizes : [],
+    outOfStockSizes: parseOutOfStockSizes(rawSizeImages, row.out_of_stock_sizes || row.outOfStockSizes),
     stock: (row.stock as StockStatus) || (row.stock_status as StockStatus) || 'in-stock',
     stockCount: row.stock_count ?? undefined,
     imageFit: row.image_fit ?? undefined,
     canvasBg: row.canvas_bg ?? undefined,
     featuredOnHome: row.featured_on_home !== false && row.featuredOnHome !== false,
     sortOrder: row.sort_order !== undefined && row.sort_order !== null ? Number(row.sort_order) : (row.sortOrder !== undefined ? Number(row.sortOrder) : 999),
-    sizeImages: row.size_images || row.sizeImages || undefined,
+    sizeImages: cleanSizeImages(rawSizeImages),
   };
 }
 
 function mapProductToDbRow(product: Product, isPublished = true) {
+  const mergedSizeImages: Record<string, string> = {
+    ...(product.sizeImages || {}),
+  };
+  if (product.outOfStockSizes && product.outOfStockSizes.length > 0) {
+    mergedSizeImages.__outOfStockSizes = JSON.stringify(product.outOfStockSizes);
+  }
+
   return {
     id: product.id,
     name: product.name,
@@ -67,7 +108,7 @@ function mapProductToDbRow(product: Product, isPublished = true) {
     image_fit: product.imageFit ?? 'cover-top',
     canvas_bg: product.canvasBg ?? '#F2F1EE',
     featured_on_home: product.featuredOnHome !== false,
-    size_images: product.sizeImages || null,
+    size_images: Object.keys(mergedSizeImages).length > 0 ? mergedSizeImages : null,
     is_published: isPublished,
   };
 }

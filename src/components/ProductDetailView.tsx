@@ -161,7 +161,9 @@ export const ProductDetailView: React.FC = () => {
     setQuantity(1);
     setValidationMsg(null);
     if (selectedProduct.colors && selectedProduct.colors.length > 0) {
-      const firstColor = selectedProduct.colors[0];
+      const firstColor =
+        selectedProduct.colors.find((c) => c.inStock !== false) ||
+        selectedProduct.colors[0];
       setSelectedColor(firstColor.name);
       const targetImg =
         firstColor.imageUrl ||
@@ -175,9 +177,11 @@ export const ProductDetailView: React.FC = () => {
       setSelectedColor(undefined);
     }
 
-    if (selectedProduct.sizes.length === 1) {
-      const singleSize = selectedProduct.sizes[0];
-      setSelectedSize(singleSize);
+    const availableSizes = selectedProduct.sizes.filter(
+      (s) => !selectedProduct.outOfStockSizes?.includes(s)
+    );
+    if (selectedProduct.sizes.length === 1 && availableSizes.length === 1) {
+      setSelectedSize(availableSizes[0]);
     } else {
       setSelectedSize('');
     }
@@ -206,6 +210,13 @@ export const ProductDetailView: React.FC = () => {
     selectedSize || undefined
   );
   const isAvailable = selectedProduct.stock === 'in-stock';
+  const selectedColorSwatch = selectedProduct.colors?.find((c) => c.name === selectedColor);
+  const isSelectedColorOutOfStock = selectedColorSwatch?.inStock === false;
+  const isSelectedSizeOutOfStock =
+    !!selectedSize && (selectedProduct.outOfStockSizes?.includes(selectedSize) ?? false);
+  const allSizesOutOfStock =
+    selectedProduct.sizes.length > 0 &&
+    selectedProduct.sizes.every((s) => selectedProduct.outOfStockSizes?.includes(s));
 
   const fitClass =
     selectedProduct.imageFit === 'contain'
@@ -214,7 +225,13 @@ export const ProductDetailView: React.FC = () => {
       ? 'object-cover object-top'
       : 'object-cover object-center';
 
-  const handleColorClick = (swatch: { name: string; hex: string; imageIndex?: number; imageUrl?: string }) => {
+  const handleColorClick = (swatch: {
+    name: string;
+    hex: string;
+    imageIndex?: number;
+    imageUrl?: string;
+    inStock?: boolean;
+  }) => {
     setSelectedColor(swatch.name);
     setValidationMsg(null);
 
@@ -239,12 +256,21 @@ export const ProductDetailView: React.FC = () => {
       setValidationMsg('Please choose a colorway first.');
       return false;
     }
+    if (isSelectedColorOutOfStock) {
+      setValidationMsg(`${selectedColor} colorway is currently stocked out. Please select another available color.`);
+      return false;
+    }
     if (!selectedSize) {
       setValidationMsg(
         selectedProduct.category === 'Perfume'
           ? 'Please select a bottle volume first.'
           : 'Please select your size before adding to bag.'
       );
+      sizeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false;
+    }
+    if (isSelectedSizeOutOfStock) {
+      setValidationMsg(`${selectedSize} is currently stocked out. Please pick another size.`);
       sizeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return false;
     }
@@ -450,11 +476,17 @@ export const ProductDetailView: React.FC = () => {
                   </span>
                   <span className="text-xs font-medium text-[#111111] dark:text-[#F5F4F0]">
                     {selectedColor}
+                    {isSelectedColorOutOfStock && (
+                      <span className="ml-1.5 text-rose-600 dark:text-rose-400 font-semibold">
+                        (Stock Out)
+                      </span>
+                    )}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {selectedProduct.colors.map((swatch) => {
                     const isSelected = selectedColor === swatch.name;
+                    const isColorOut = swatch.inStock === false;
                     return (
                       <button
                         key={swatch.name}
@@ -462,15 +494,26 @@ export const ProductDetailView: React.FC = () => {
                         onClick={() => handleColorClick(swatch)}
                         className={`min-h-[44px] px-4 py-2 border text-xs font-medium inline-flex items-center gap-2.5 transition-colors cursor-pointer ${
                           isSelected
-                            ? 'border-[#111111] bg-[#111111] text-[#FAF9F6] dark:border-[#F5F4F0] dark:bg-[#F5F4F0] dark:text-[#08080A]'
+                            ? isColorOut
+                              ? 'border-rose-500 bg-rose-50 text-rose-800 dark:border-rose-500 dark:bg-rose-950/40 dark:text-rose-300'
+                              : 'border-[#111111] bg-[#111111] text-[#FAF9F6] dark:border-[#F5F4F0] dark:bg-[#F5F4F0] dark:text-[#08080A]'
+                            : isColorOut
+                            ? 'border-stone-200 dark:border-zinc-800 text-stone-400 dark:text-zinc-500 opacity-75 hover:border-rose-400'
                             : 'border-stone-300 dark:border-zinc-800 text-stone-700 dark:text-zinc-300 hover:border-[#111111] dark:hover:border-zinc-500'
                         }`}
                       >
                         <span
                           style={{ backgroundColor: swatch.hex }}
-                          className="w-3 h-3 rounded-full border border-black/20 dark:border-white/25 shrink-0"
+                          className={`w-3 h-3 rounded-full border border-black/20 dark:border-white/25 shrink-0 ${
+                            isColorOut ? 'opacity-50' : ''
+                          }`}
                         />
-                        <span>{swatch.name}</span>
+                        <span className={isColorOut ? 'line-through' : ''}>{swatch.name}</span>
+                        {isColorOut && (
+                          <span className="text-[9px] uppercase tracking-wider font-semibold text-rose-600 dark:text-rose-400">
+                            Out
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -500,13 +543,17 @@ export const ProductDetailView: React.FC = () => {
 
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {selectedProduct.sizes.map((size) => {
-                  const isSelected = selectedSize === size;
+                  const isSizeOut =
+                    selectedProduct.outOfStockSizes?.includes(size) ?? false;
+                  const isSelected = !isSizeOut && selectedSize === size;
                   const sizePrice = selectedProduct.priceMap?.[size];
                   return (
                     <button
                       key={size}
                       type="button"
+                      disabled={isSizeOut}
                       onClick={() => {
+                        if (isSizeOut) return;
                         setSelectedSize(size);
                         setValidationMsg(null);
                         if (selectedProduct.sizeImages?.[size]) {
@@ -517,17 +564,27 @@ export const ProductDetailView: React.FC = () => {
                           }
                         }
                       }}
-                      className={`min-h-[48px] px-3 py-2 border text-xs font-medium flex flex-col items-center justify-center transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'border-[#111111] bg-[#111111] text-[#FAF9F6] dark:border-[#F5F4F0] dark:bg-[#F5F4F0] dark:text-[#08080A]'
-                          : 'border-stone-300 dark:border-zinc-800 text-[#111111] dark:text-zinc-200 hover:border-[#111111] dark:hover:border-zinc-500'
+                      className={`min-h-[48px] px-3 py-2 border text-xs font-medium flex flex-col items-center justify-center transition-colors ${
+                        isSizeOut
+                          ? 'border-stone-200 dark:border-zinc-800/80 bg-stone-100/60 dark:bg-zinc-900/50 text-stone-400 dark:text-zinc-600 cursor-not-allowed opacity-75'
+                          : isSelected
+                          ? 'border-[#111111] bg-[#111111] text-[#FAF9F6] dark:border-[#F5F4F0] dark:bg-[#F5F4F0] dark:text-[#08080A] cursor-pointer'
+                          : 'border-stone-300 dark:border-zinc-800 text-[#111111] dark:text-zinc-200 hover:border-[#111111] dark:hover:border-zinc-500 cursor-pointer'
                       }`}
                     >
-                      <span className="whitespace-nowrap">{size}</span>
-                      {sizePrice !== undefined && (
-                        <span className="font-mono tabular-nums text-[10px] opacity-75 mt-0.5">
-                          {formatBDT(sizePrice)}
+                      <span className={`whitespace-nowrap ${isSizeOut ? 'line-through' : ''}`}>
+                        {size}
+                      </span>
+                      {isSizeOut ? (
+                        <span className="text-[9px] uppercase tracking-wider font-semibold text-rose-600 dark:text-rose-400 mt-0.5">
+                          Stock Out
                         </span>
+                      ) : (
+                        sizePrice !== undefined && (
+                          <span className="font-mono tabular-nums text-[10px] opacity-75 mt-0.5">
+                            {formatBDT(sizePrice)}
+                          </span>
+                        )
                       )}
                     </button>
                   );
@@ -543,47 +600,68 @@ export const ProductDetailView: React.FC = () => {
 
             {/* Purchase Actions */}
             {isAvailable ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="inline-flex items-center border border-stone-300 dark:border-zinc-800 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                      className="min-h-[50px] min-w-[44px] flex items-center justify-center text-stone-600 dark:text-zinc-300 hover:text-[#111111] dark:hover:text-white cursor-pointer"
-                      aria-label="Decrease quantity"
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="w-8 text-center font-mono tabular-nums text-xs font-medium text-[#111111] dark:text-[#F5F4F0]">
-                      {quantity}
+              isSelectedColorOutOfStock || allSizesOutOfStock || isSelectedSizeOutOfStock ? (
+                <div className="space-y-2.5">
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full min-h-[50px] px-6 py-3 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 text-xs sm:text-sm font-semibold tracking-wider uppercase cursor-not-allowed border border-rose-200 dark:border-rose-800/60 flex items-center justify-center gap-2"
+                  >
+                    <span>
+                      {isSelectedColorOutOfStock
+                        ? `${selectedColor} · Stock Out`
+                        : 'Selected Variant · Stock Out'}
                     </span>
+                  </button>
+                  <p className="text-[11px] text-center text-stone-500 dark:text-zinc-400">
+                    {isSelectedColorOutOfStock
+                      ? 'This colorway is currently out of stock. Select an available colorway above to order.'
+                      : 'Please choose an available size to continue.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="inline-flex items-center border border-stone-300 dark:border-zinc-800 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                        className="min-h-[50px] min-w-[44px] flex items-center justify-center text-stone-600 dark:text-zinc-300 hover:text-[#111111] dark:hover:text-white cursor-pointer"
+                        aria-label="Decrease quantity"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="w-8 text-center font-mono tabular-nums text-xs font-medium text-[#111111] dark:text-[#F5F4F0]">
+                        {quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setQuantity((q) => q + 1)}
+                        className="min-h-[50px] min-w-[44px] flex items-center justify-center text-stone-600 dark:text-zinc-300 hover:text-[#111111] dark:hover:text-white cursor-pointer"
+                        aria-label="Increase quantity"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
                     <button
                       type="button"
-                      onClick={() => setQuantity((q) => q + 1)}
-                      className="min-h-[50px] min-w-[44px] flex items-center justify-center text-stone-600 dark:text-zinc-300 hover:text-[#111111] dark:hover:text-white cursor-pointer"
-                      aria-label="Increase quantity"
+                      onClick={handleAddToBag}
+                      className="flex-1 min-h-[50px] px-6 py-3 bg-[#111111] text-[#FAF9F6] dark:bg-[#F5F4F0] dark:text-[#08080A] text-xs sm:text-sm font-medium tracking-wide hover:opacity-85 active:scale-[0.99] transition-all cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5" />
+                      Add to Bag
                     </button>
                   </div>
 
                   <button
                     type="button"
-                    onClick={handleAddToBag}
-                    className="flex-1 min-h-[50px] px-6 py-3 bg-[#111111] text-[#FAF9F6] dark:bg-[#F5F4F0] dark:text-[#08080A] text-xs sm:text-sm font-medium tracking-wide hover:opacity-85 active:scale-[0.99] transition-all cursor-pointer"
+                    onClick={handleExpressCOD}
+                    className="w-full min-h-[50px] px-6 py-3 border border-[#111111] dark:border-[#F5F4F0] text-xs sm:text-sm font-medium tracking-wide text-[#111111] dark:text-[#F5F4F0] hover:bg-[#111111] hover:text-[#FAF9F6] dark:hover:bg-[#F5F4F0] dark:hover:text-[#08080A] transition-colors cursor-pointer"
                   >
-                    Add to Bag
+                    Order with Cash on Delivery
                   </button>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleExpressCOD}
-                  className="w-full min-h-[50px] px-6 py-3 border border-[#111111] dark:border-[#F5F4F0] text-xs sm:text-sm font-medium tracking-wide text-[#111111] dark:text-[#F5F4F0] hover:bg-[#111111] hover:text-[#FAF9F6] dark:hover:bg-[#F5F4F0] dark:hover:text-[#08080A] transition-colors cursor-pointer"
-                >
-                  Order with Cash on Delivery
-                </button>
-              </div>
+              )
             ) : (
               <div className="space-y-3">
                 <button
@@ -676,15 +754,28 @@ export const ProductDetailView: React.FC = () => {
               {formatBDT(currentPrice * quantity)}
             </p>
             <p className="text-[11px] text-stone-500 dark:text-zinc-400 truncate">
-              {selectedSize ? `${selectedSize}${selectedColor ? ` · ${selectedColor}` : ''}` : 'Select size'}
+              {isSelectedColorOutOfStock
+                ? `${selectedColor} · Stock Out`
+                : selectedSize
+                ? `${selectedSize}${selectedColor ? ` · ${selectedColor}` : ''}`
+                : 'Select size'}
             </p>
           </div>
           <button
             type="button"
+            disabled={isSelectedColorOutOfStock || allSizesOutOfStock || isSelectedSizeOutOfStock}
             onClick={handleAddToBag}
-            className="min-h-[42px] px-6 py-2.5 bg-[#111111] text-[#FAF9F6] dark:bg-[#F5F4F0] dark:text-[#08080A] text-xs font-medium whitespace-nowrap shrink-0 active:scale-[0.98] transition-transform"
+            className={`min-h-[42px] px-6 py-2.5 text-xs font-medium whitespace-nowrap shrink-0 transition-transform ${
+              isSelectedColorOutOfStock || allSizesOutOfStock || isSelectedSizeOutOfStock
+                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 cursor-not-allowed'
+                : 'bg-[#111111] text-[#FAF9F6] dark:bg-[#F5F4F0] dark:text-[#08080A] active:scale-[0.98]'
+            }`}
           >
-            {selectedSize ? 'Add to Bag' : 'Select Size'}
+            {isSelectedColorOutOfStock || allSizesOutOfStock || isSelectedSizeOutOfStock
+              ? 'Stock Out'
+              : selectedSize
+              ? 'Add to Bag'
+              : 'Select Size'}
           </button>
         </div>
       )}

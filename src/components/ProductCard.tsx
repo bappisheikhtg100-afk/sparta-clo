@@ -18,10 +18,17 @@ function getFitClass(fit?: 'cover-top' | 'cover-center' | 'contain'): string {
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
   const { navigate, addToCart } = useStore();
+  const firstInStockColor =
+    product.colors?.find((c) => c.inStock !== false) || product.colors?.[0];
   const [selectedSwatchIdx, setSelectedSwatchIdx] = useState<number | null>(null);
   const [selectedColorName, setSelectedColorName] = useState<string | undefined>(
-    product.colors?.[0]?.name
+    firstInStockColor?.name
   );
+
+  const activeSwatch =
+    (selectedColorName && product.colors?.find((c) => c.name === selectedColorName)) ||
+    product.colors?.[0];
+  const isSelectedColorOut = activeSwatch?.inStock === false;
 
   const { price, isStartingFrom } = getDisplayPrice(product);
 
@@ -54,6 +61,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
 
   const handleQuickAdd = (e: React.MouseEvent, size: string) => {
     e.stopPropagation();
+    if (isSelectedColorOut || product.outOfStockSizes?.includes(size)) return;
     const sizePrice = product.priceMap?.[size] ?? product.price ?? price;
     addToCart(product, size, selectedColorName, sizePrice, 1, true);
   };
@@ -124,24 +132,41 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
             }}
             className="hidden lg:flex flex-col gap-1.5 absolute inset-x-0 bottom-0 p-3 bg-[#FAF9F6]/95 dark:bg-[#0C0C0E]/95 backdrop-blur-md border-t border-stone-200/80 dark:border-zinc-800 translate-y-full opacity-0 group-hover/media:translate-y-0 group-hover/media:opacity-100 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
           >
-            <span className="text-[10px] font-medium text-stone-500 dark:text-zinc-400 tracking-wide">
-              Quick Add
-            </span>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {product.sizes.map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleQuickAdd(e, size);
-                  }}
-                  className="min-h-[32px] px-2.5 py-1 text-[11px] font-medium border border-stone-300 dark:border-zinc-700 text-[#111111] dark:text-[#F5F4F0] hover:bg-[#111111] hover:text-[#FAF9F6] hover:border-[#111111] dark:hover:bg-[#F5F4F0] dark:hover:text-[#08080A] dark:hover:border-[#F5F4F0] transition-colors whitespace-nowrap cursor-pointer"
-                >
-                  {size}
-                </button>
-              ))}
-            </div>
+            {isSelectedColorOut ? (
+              <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400 tracking-wide">
+                {activeSwatch?.name} · Currently Stock Out
+              </span>
+            ) : (
+              <>
+                <span className="text-[10px] font-medium text-stone-500 dark:text-zinc-400 tracking-wide">
+                  Quick Add
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {product.sizes.map((size) => {
+                    const isSizeOut = product.outOfStockSizes?.includes(size) ?? false;
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        disabled={isSizeOut}
+                        title={isSizeOut ? `${size} — Stock Out` : `Add ${size}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleQuickAdd(e, size);
+                        }}
+                        className={`min-h-[32px] px-2.5 py-1 text-[11px] font-medium border transition-colors whitespace-nowrap ${
+                          isSizeOut
+                            ? 'border-stone-200 dark:border-zinc-800 text-stone-400 dark:text-zinc-600 line-through opacity-55 cursor-not-allowed'
+                            : 'border-stone-300 dark:border-zinc-700 text-[#111111] dark:text-[#F5F4F0] hover:bg-[#111111] hover:text-[#FAF9F6] hover:border-[#111111] dark:hover:bg-[#F5F4F0] dark:hover:text-[#08080A] dark:hover:border-[#F5F4F0] cursor-pointer'
+                        }`}
+                      >
+                        {size}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="hidden lg:flex absolute inset-x-0 bottom-0 px-3.5 py-2.5 bg-[#FAF9F6]/92 dark:bg-[#0C0C0E]/92 backdrop-blur-md border-t border-stone-200/80 dark:border-zinc-800 items-center justify-between translate-y-full opacity-0 group-hover/media:translate-y-0 group-hover/media:opacity-100 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none">
@@ -191,7 +216,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
               aria-label="Colorways"
             >
               {product.colors.map((swatch) => {
-                const isSelected = selectedSwatchIdx === swatch.imageIndex;
+                const isSelected = selectedColorName === swatch.name;
+                const isSwatchOut = swatch.inStock === false;
                 return (
                   <button
                     key={swatch.name}
@@ -207,28 +233,40 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, index }) => {
                         if (found !== -1) targetIdx = found;
                       }
 
-                      if (targetIdx !== undefined) {
-                        if (selectedSwatchIdx === targetIdx) {
-                          setSelectedSwatchIdx(null);
-                          setSelectedColorName(product.colors?.[0]?.name);
-                        } else {
+                      if (selectedColorName === swatch.name && selectedSwatchIdx !== null) {
+                        setSelectedSwatchIdx(null);
+                        setSelectedColorName(firstInStockColor?.name);
+                      } else {
+                        setSelectedColorName(swatch.name);
+                        if (targetIdx !== undefined) {
                           setSelectedSwatchIdx(targetIdx);
-                          setSelectedColorName(swatch.name);
                         }
                       }
                     }}
-                    title={swatch.name}
-                    aria-label={`Preview ${swatch.name}`}
-                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-transform cursor-pointer ${
+                    title={isSwatchOut ? `${swatch.name} (Stock Out)` : swatch.name}
+                    aria-label={isSwatchOut ? `${swatch.name} (Stock Out)` : `Preview ${swatch.name}`}
+                    className={`relative w-4 h-4 rounded-full flex items-center justify-center transition-transform cursor-pointer ${
                       isSelected
-                        ? 'ring-1 ring-offset-1 ring-[#111111] dark:ring-[#F5F4F0] dark:ring-offset-[#08080A]'
+                        ? isSwatchOut
+                          ? 'ring-1 ring-offset-1 ring-rose-500 dark:ring-offset-[#08080A]'
+                          : 'ring-1 ring-offset-1 ring-[#111111] dark:ring-[#F5F4F0] dark:ring-offset-[#08080A]'
                         : 'hover:scale-110'
                     }`}
                   >
                     <span
                       style={{ backgroundColor: swatch.hex }}
-                      className="w-3 h-3 rounded-full border border-black/20 dark:border-white/25"
+                      className={`w-3 h-3 rounded-full border border-black/20 dark:border-white/25 ${
+                        isSwatchOut ? 'opacity-40' : ''
+                      }`}
                     />
+                    {isSwatchOut && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                      >
+                        <span className="w-3.5 h-[1.5px] bg-rose-600 rotate-45 rounded-full" />
+                      </span>
+                    )}
                   </button>
                 );
               })}

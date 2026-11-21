@@ -435,6 +435,14 @@ export async function createCarrybeeOrder(
 
   const phone = normalizeBangladeshPhone(payload.recipient_phone);
 
+  const rawDescription = (
+    payload.product_description ||
+    payload.item_description ||
+    'SPARTA Luxury Apparel Piece'
+  ).trim();
+  const safeDescription =
+    rawDescription.length > 240 ? `${rawDescription.slice(0, 237)}...` : rawDescription;
+
   const body: Record<string, any> = {
     store_id: storeId,
     merchant_order_id: payload.merchant_order_id,
@@ -446,7 +454,7 @@ export async function createCarrybeeOrder(
     item_weight: Math.max(100, Math.min(25000, Number(payload.item_weight) || 500)), // grams!
     item_quantity: Math.max(1, payload.item_quantity || 1),
     collectable_amount: Math.round(Number(payload.collectable_amount ?? payload.amount_to_collect) || 0),
-    product_description: payload.product_description || payload.item_description || 'SPARTA Luxury Apparel Piece',
+    product_description: safeDescription,
     special_instruction: payload.special_instruction || 'Please call before delivery. Fragile luxury item.',
   };
 
